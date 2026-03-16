@@ -24,9 +24,7 @@ const PreparationPhase: React.FC = () => {
     }, [currentDay]);
 
 
-    const handleProceed = () => {
-        setPhase('BATTLE');
-    };
+
 
 
     const handleToggleRecipeEquip = (recipeId: string) => {
@@ -190,9 +188,9 @@ const PreparationPhase: React.FC = () => {
             <button
                 className="start-btn"
                 style={{ marginTop: '40px', fontSize: '24px', padding: '15px 40px', backgroundColor: '#990000' }}
-                onClick={handleProceed}
+                onClick={() => setPhase('RITUAL')}
             >
-                バトル開始
+                儀式開始
             </button>
         </div >
     );

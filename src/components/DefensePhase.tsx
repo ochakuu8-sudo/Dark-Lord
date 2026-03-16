@@ -5,11 +5,11 @@ import type { EntityState } from '../game/entities';
 import { UNIT_STATS } from '../game/entities';
 
 
-const FIELD_WIDTH = 1110;
-const FIELD_HEIGHT = 500; // キャンバスの高さを拡大
-const DEMON_BASE = { x: 130, y: FIELD_HEIGHT / 2 };
-const BASE_MAX_HP = 500;
-const MAX_WAVES = 4;
+const FIELD_WIDTH = 1200;
+const FIELD_HEIGHT = 650; 
+const DEMON_BASE = { x: 120, y: FIELD_HEIGHT / 2 };
+const BASE_MAX_HP = 2500;
+const MAX_WAVES = 1; // Wave制を廃止し、一度に全出現させる
 
 // Projectile visual type based on attacker role
 type ProjectileStyle = 'arrow' | 'orb' | 'bomb' | 'sword_flash';
@@ -38,6 +38,7 @@ interface Projectile {
     distanceTraveled?: number;
     isArea?: boolean;
     areaRadius?: number;
+    areaMultiplier?: number;
     duration?: number;
     sourceId?: string;
 }
@@ -52,23 +53,14 @@ interface FloatingText {
     color: number;
 }
 
-const HERO_ROSTER = {
-    '村人': { maxHp: 20, attack: 4, range: 40, speed: 0.7, maxCooldown: 70, color: 0xddddbb },
-    '農夫': { maxHp: 25, attack: 6, range: 40, speed: 0.65, maxCooldown: 60, color: 0xbbaa77 },
-    '弓兵': { maxHp: 30, attack: 12, range: 180, speed: 0.75, maxCooldown: 80, color: 0xaaeeaa },
-    '剣士': { maxHp: 70, attack: 18, range: 50, speed: 0.85, maxCooldown: 55, color: 0x8888ff },
-    '重騎士': { maxHp: 160, attack: 25, range: 55, speed: 0.55, maxCooldown: 70, color: 0x5566cc },
-    '魔法使い': { maxHp: 35, attack: 30, range: 160, speed: 0.7, maxCooldown: 100, color: 0xee88ff },
-    '聖騎士': { maxHp: 300, attack: 40, range: 60, speed: 0.6, maxCooldown: 65, color: 0xffffff },
-    '大魔道士': { maxHp: 80, attack: 55, range: 200, speed: 0.6, maxCooldown: 100, color: 0xcc44ff },
-    // 新規追加
-    'シーフ': { maxHp: 40, attack: 10, range: 30, speed: 1.4, maxCooldown: 40, color: 0x444444 },
-    'パラディン': { maxHp: 400, attack: 20, range: 55, speed: 0.45, maxCooldown: 80, color: 0xffdd44 },
-    'プリースト': { maxHp: 60, attack: -30, range: 150, speed: 0.55, maxCooldown: 90, color: 0xffccff }, // マイナスの攻撃力を設定し、後で回復として扱う
-    '勇者': { maxHp: 800, attack: 65, range: 65, speed: 0.7, maxCooldown: 50, color: 0xff2222 },
-};
+// 英雄軍側のリスト（図鑑やスポーンで使用）
+const HERO_ROSTER_KEYS = ['村人', '農夫', '弓兵', '剣士', 'シーフ', '魔法使い', '重騎士', 'プリースト', '聖騎士', 'パラディン', '大魔道士', '勇者'] as const;
+type HeroType = typeof HERO_ROSTER_KEYS[number];
 
-type HeroType = keyof typeof HERO_ROSTER;
+const HERO_ROSTER: Record<HeroType, any> = HERO_ROSTER_KEYS.reduce((acc, key) => {
+    acc[key] = UNIT_STATS[key];
+    return acc;
+}, {} as any);
 
 // Determine projectile style from attacker type name
 function getProjectileStyle(type: string): ProjectileStyle {
@@ -157,10 +149,10 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     useEffect(() => {
         const initialEntities: EntityState[] = [];
 
-        const withStats = summonedMonsters.map(type => ({
-            type,
-            stats: UNIT_STATS[type] || UNIT_STATS['goblin']
-        }));
+        const withStats = summonedMonsters.map(unit => {
+            const stats = UNIT_STATS[unit.type] || UNIT_STATS['orc_bone'] || Object.values(UNIT_STATS)[0];
+            return { unit, stats };
+        });
 
         // Group entities exactly by their attack range
         const groupsByRange = new Map<number, typeof withStats>();
@@ -189,17 +181,20 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             const totalH = (group.length - 1) * UNIT_SPACING;
             const startY = FIELD_HEIGHT / 2 - totalH / 2;
 
-            group.forEach(({ type, stats }, idx) => {
+            group.forEach(({ unit, stats }, idx) => {
                 let hpMult = hasGiantHeart ? 2.0 : 1.0;
                 let spdMult = hasGiantHeart ? 0.7 : 1.0;
                 let atkMult = hasFireCrown ? (stats.color === 0xff3333 ? 1.5 : 0.8) : 1.0;
 
+                const baseAttack = Math.floor(stats.attack! * atkMult);
+                const finalAttack = baseAttack + (unit.attackBonus || 0);
+
                 initialEntities.push({
-                    id: generateId(), type, faction: 'DEMON',
+                    id: unit.id, type: unit.type, faction: 'DEMON',
                     x: groupX,
                     y: startY + idx * UNIT_SPACING,
                     hp: Math.floor(stats.maxHp! * hpMult), maxHp: Math.floor(stats.maxHp! * hpMult),
-                    attack: Math.floor(stats.attack! * atkMult), range: stats.range!,
+                    attack: finalAttack, range: stats.range!,
                     speed: stats.speed! * spdMult,
                     cooldown: Math.random() * (stats.maxCooldown! / 2),
                     maxCooldown: stats.maxCooldown!, color: stats.color!,
@@ -215,12 +210,12 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     // ── Register external spawn callback ──
     useEffect(() => {
         const spawnFn = (type: string) => {
-            const stats = UNIT_STATS[type] || UNIT_STATS['goblin'];
+            const stats = UNIT_STATS[type] || UNIT_STATS['orc_bone'] || Object.values(UNIT_STATS)[0];
             const hasGiantHeart = ownedRelics.includes('giant_heart');
             const hasFireCrown = ownedRelics.includes('fire_crown');
             const hpMult = hasGiantHeart ? 2.0 : 1.0;
             const spdMult = hasGiantHeart ? 0.7 : 1.0;
-            const atkMult = hasFireCrown ? (stats.color === 0xff3333 ? 1.5 : 0.8) : 1.0;
+            const atkMult = hasFireCrown ? ((stats.color || 0xffffff) === 0xff3333 ? 1.5 : 0.8) : 1.0;
             const id = Math.random().toString(36).substr(2, 9);
             const newEnt: EntityState = {
                 id, type, faction: 'DEMON',
@@ -306,41 +301,38 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     const buildWave = useCallback((waveNum: number): { type: HeroType, count: number }[] => {
         const day = currentDay;
         if (day === 1) {
-            if (waveNum === 1) return [{ type: '村人', count: 4 }];
-            if (waveNum === 2) return [{ type: '村人', count: 6 }, { type: '農夫', count: 2 }];
-            if (waveNum === 3) return [{ type: '村人', count: 8 }, { type: '農夫', count: 4 }];
-            return [{ type: '弓兵', count: 4 }, { type: '剣士', count: 3 }];
+            if (waveNum === 1) return [{ type: '村人', count: 8 }];
+            if (waveNum === 2) return [{ type: '村人', count: 12 }, { type: '農夫', count: 4 }];
+            if (waveNum === 3) return [{ type: '村人', count: 15 }, { type: '農夫', count: 8 }];
+            return [{ type: '弓兵', count: 8 }, { type: '剣士', count: 6 }, { type: '村人', count: 10 }];
         }
         if (day === 2) {
-            const base = 4 + waveNum * 2;
-            if (waveNum <= 2) return [{ type: '農夫', count: base }, { type: '弓兵', count: Math.floor(base / 2) }];
-            if (waveNum === 3) return [{ type: '剣士', count: 5 }, { type: '弓兵', count: 4 }, { type: '農夫', count: 3 }];
-            return [{ type: '重騎士', count: 2 }, { type: '剣士', count: 5 }, { type: '弓兵', count: 5 }];
+            const base = 8 + waveNum * 4;
+            if (waveNum <= 2) return [{ type: '農夫', count: base }, { type: '弓兵', count: Math.floor(base / 2) }, { type: '剣士', count: 4 }];
+            if (waveNum === 3) return [{ type: '剣士', count: 10 }, { type: '弓兵', count: 8 }, { type: '農夫', count: 8 }];
+            return [{ type: '重騎士', count: 4 }, { type: '剣士', count: 10 }, { type: '弓兵', count: 10 }];
         }
         if (day === 3) {
-            // シーフの登場
-            if (waveNum === 1) return [{ type: '剣士', count: 5 }, { type: 'シーフ', count: 2 }];
-            if (waveNum === 2) return [{ type: '弓兵', count: 5 }, { type: 'シーフ', count: 3 }, { type: '重騎士', count: 1 }];
-            if (waveNum === 3) return [{ type: '剣士', count: 4 }, { type: '魔法使い', count: 2 }, { type: 'シーフ', count: 4 }];
-            return [{ type: '重騎士', count: 3 }, { type: '大魔道士', count: 1 }, { type: 'シーフ', count: 5 }];
+            if (waveNum === 1) return [{ type: '剣士', count: 10 }, { type: 'シーフ', count: 5 }];
+            if (waveNum === 2) return [{ type: '弓兵', count: 10 }, { type: 'シーフ', count: 8 }, { type: '重騎士', count: 3 }];
+            if (waveNum === 3) return [{ type: '剣士', count: 12 }, { type: '魔法使い', count: 4 }, { type: 'シーフ', count: 8 }];
+            return [{ type: '重騎士', count: 6 }, { type: '大魔道士', count: 2 }, { type: 'シーフ', count: 10 }];
         }
         if (day === 4) {
-            // プリーストとパラディンの登場
-            if (waveNum <= 2) return [{ type: '剣士', count: 6 }, { type: 'プリースト', count: 1 }, { type: '弓兵', count: 3 }];
-            if (waveNum === 3) return [{ type: '重騎士', count: 4 }, { type: 'プリースト', count: 2 }, { type: '魔法使い', count: 2 }];
-            return [{ type: 'パラディン', count: 1 }, { type: 'プリースト', count: 2 }, { type: '剣士', count: 5 }, { type: '弓兵', count: 4 }];
+            if (waveNum <= 2) return [{ type: '剣士', count: 12 }, { type: 'プリースト', count: 2 }, { type: '弓兵', count: 6 }];
+            if (waveNum === 3) return [{ type: '重騎士', count: 8 }, { type: 'プリースト', count: 4 }, { type: '魔法使い', count: 4 }];
+            return [{ type: 'パラディン', count: 2 }, { type: 'プリースト', count: 4 }, { type: '剣士', count: 12 }, { type: '弓兵', count: 8 }];
         }
         if (day === 5 || day === 10) {
-            // ボス：勇者パーティ（ウェーブ4で確定）
-            const scale = day === 10 ? 2 : 1;
-            if (waveNum <= 3) return [{ type: 'パラディン', count: scale }, { type: '聖騎士', count: 2 * scale }, { type: 'プリースト', count: 2 * scale }, { type: '大魔道士', count: scale }, { type: 'シーフ', count: 3 * scale }];
-            return [{ type: '勇者', count: 1 }, { type: 'パラディン', count: 1 * scale }, { type: 'プリースト', count: 2 * scale }, { type: '大魔道士', count: 1 * scale }, { type: 'シーフ', count: 2 * scale }];
+            const scale = day === 10 ? 3 : 2;
+            if (waveNum <= 3) return [{ type: 'パラディン', count: 2 * scale }, { type: '聖騎士', count: 4 * scale }, { type: 'プリースト', count: 3 * scale }, { type: '大魔道士', count: 2 * scale }, { type: 'シーフ', count: 6 * scale }];
+            return [{ type: '勇者', count: scale }, { type: 'パラディン', count: 2 * scale }, { type: 'プリースト', count: 4 * scale }, { type: '大魔道士', count: 2 * scale }, { type: 'シーフ', count: 5 * scale }];
         }
 
         const scale = day - 5;
-        if (waveNum <= 2) return [{ type: 'パラディン', count: 1 + Math.floor(scale / 2) }, { type: '聖騎士', count: 2 + scale }, { type: 'プリースト', count: 1 + scale }, { type: 'シーフ', count: 2 + scale }];
-        if (waveNum === 3) return [{ type: '重騎士', count: 4 + scale }, { type: '大魔道士', count: 1 + scale }, { type: 'プリースト', count: 2 + scale }];
-        return [{ type: '勇者', count: 1 + Math.floor(scale / 3) }, { type: 'パラディン', count: 2 + scale }, { type: 'プリースト', count: 2 + scale }, { type: '大魔道士', count: 2 + scale }];
+        if (waveNum <= 2) return [{ type: 'パラディン', count: 2 + scale }, { type: '聖騎士', count: 4 + scale * 2 }, { type: 'プリースト', count: 2 + scale }, { type: 'シーフ', count: 4 + scale * 2 }];
+        if (waveNum === 3) return [{ type: '重騎士', count: 8 + scale * 2 }, { type: '大魔道士', count: 2 + scale }, { type: 'プリースト', count: 4 + scale }];
+        return [{ type: '勇者', count: 1 + Math.floor(scale / 2) }, { type: 'パラディン', count: 4 + scale * 2 }, { type: 'プリースト', count: 4 + scale * 2 }, { type: '大魔道士', count: 3 + scale }];
     }, [currentDay]);
 
     const spawnWave = useCallback(() => {
@@ -348,26 +340,41 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         if (s.wave >= MAX_WAVES) return;
         s.wave++;
         s.waveInProgress = true;
-        const composition = buildWave(s.wave);
+        
+        // 全Wave分の敵を統合して一斉に出現させる
+        const allComposition: { type: HeroType, count: number }[] = [];
+        for (let w = 1; w <= 4; w++) {
+            buildWave(w).forEach(c => {
+                const existing = allComposition.find(x => x.type === c.type);
+                if (existing) existing.count += c.count;
+                else allComposition.push({ ...c });
+            });
+        }
+
+        const dayHpMult = 1.0 + (currentDay - 1) * 0.4;
         const newHeroes: EntityState[] = [];
         let offset = 0;
-        composition.forEach(({ type, count }) => {
+        
+        allComposition.forEach(({ type, count }) => {
             const stats = HERO_ROSTER[type];
             for (let i = 0; i < count; i++) {
-                // 15% chance for elite (gold glow, 2x stats, 3x gold reward)
                 const isElite = Math.random() < 0.15;
                 const id = generateId();
                 if (isElite) s.eliteIds.add(id);
+
+                const finalHp = Math.floor(stats.maxHp * (isElite ? 2 : 1) * dayHpMult);
+
                 newHeroes.push({
                     id, type, faction: 'HERO',
-                    x: FIELD_WIDTH - 150 - offset * 8, // spawn near right side
-                    y: FIELD_HEIGHT / 2 - 100 + Math.random() * 200,
-                    hp: stats.maxHp * (isElite ? 2 : 1),
-                    maxHp: stats.maxHp * (isElite ? 2 : 1),
+                    // 右側に広く分散させてスポーン
+                    x: FIELD_WIDTH - 50 - Math.random() * 300,
+                    y: 50 + Math.random() * (FIELD_HEIGHT - 100),
+                    hp: finalHp,
+                    maxHp: finalHp,
                     attack: stats.attack * (isElite ? 1.8 : 1),
                     range: stats.range,
                     speed: stats.speed * (isElite ? 1.15 : 1),
-                    cooldown: Math.random() * 30,
+                    cooldown: Math.random() * 40,
                     maxCooldown: stats.maxCooldown,
                     color: isElite ? 0xffd700 : stats.color,
                 });
@@ -376,7 +383,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         });
         s.entities.push(...newHeroes);
         setUiState(prev => ({ ...prev, wave: s.wave }));
-    }, [buildWave]);
+    }, [buildWave, currentDay]);
 
     // ── Spawn a projectile ────────────────
     const spawnProjectile = (attacker: EntityState, target: EntityState | 'base' | 'hero_base') => {
@@ -393,6 +400,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         let maxDistance = Infinity;
         let isArea = false;
         let areaRadius = 0;
+        let areaMultiplier = 1;
 
         // Check for specific abilities
         if (attacker.passiveAbilities) {
@@ -404,6 +412,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 if (pa.type === 'AREA_DOT') {
                     isArea = true;
                     areaRadius = pa.range || 60;
+                    areaMultiplier = pa.value || 1;
                 }
             });
         }
@@ -424,7 +433,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             damage: projDamage,
             color: projColor,
             style,
-            size: (style === 'bomb' || isArea) ? 8 : style === 'orb' ? 5 : 3,
+            size: (style === 'bomb' || isArea) ? 14 : style === 'orb' ? 10 : 6,
             angle,
             trail: [],
             isPiercing,
@@ -433,6 +442,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             distanceTraveled: 0,
             isArea,
             areaRadius,
+            areaMultiplier,
             sourceId: attacker.id
         });
     };
@@ -449,7 +459,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         // ── Castle auto-attack ──────────────
         const CASTLE_RANGE = 250;
-        const CASTLE_DAMAGE = 15;
+        const CASTLE_DAMAGE = 75;
         const CASTLE_COOLDOWN = 90; // ~1.5s at 60fps
         if (s.castleCooldown > 0) s.castleCooldown -= delta;
         if (s.castleCooldown <= 0) {
@@ -588,11 +598,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         if (other.hp > 0 && other.faction === 'DEMON' && other.passiveAbilities) {
                             const ability = other.passiveAbilities.find(pa => pa.type === 'CORPSE_EXPLOSION');
                             if (ability && Math.hypot(other.x - ent.x, other.y - ent.y) < (ability.range || 150)) {
-                                const expDmg = ability.value || 30;
+                                const expDmg = other.attack * (ability.value || 1);
                                 // Visual & Damage
                                 for (const hero of entities) {
                                     if (hero.faction === 'HERO' && hero.hp > 0 && Math.hypot(hero.x - ent.x, hero.y - ent.y) < 80) {
-                                        applyDamage(hero, expDmg);
+                                        applyDamage(hero, expDmg, other);
                                     }
                                 }
                                 for (let k = 0; k < 12; k++) {
@@ -784,7 +794,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
 
             // Separation (Avoid overlapping)
-            const SEPARATION_RADIUS = 22;
+            const SEPARATION_RADIUS = 36;
             for (let j = 0; j < entities.length; j++) {
                 if (i === j) continue;
                 const other = entities[j];
@@ -826,6 +836,22 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         for (let k = 0; k < 6; k++) {
                             const a = Math.random() * Math.PI * 2;
                             s.particles.push({ id: generateId(), x: ent.x + Math.cos(a) * range, y: ent.y + Math.sin(a) * range, vx: -Math.cos(a) * 0.5, vy: -Math.sin(a) * 0.5, color: 0x44ff44, life: 30 });
+                        }
+                    }
+                    if (pa.type === 'ATK_BUFF' && s.frameCount % 60 === 0) {
+                        // Attack Buff Visual (Orange ring)
+                        const range = pa.range || 120;
+                        for (let k = 0; k < 8; k++) {
+                            const a = Math.random() * Math.PI * 2;
+                            s.particles.push({ 
+                                id: generateId(), 
+                                x: ent.x + Math.cos(a) * range, 
+                                y: ent.y + Math.sin(a) * range, 
+                                vx: -Math.cos(a) * 0.3, 
+                                vy: -Math.sin(a) * 0.3, 
+                                color: 0xffaa44, 
+                                life: 35 
+                            });
                         }
                     }
                     if (pa.type === 'SUMMON') {
@@ -946,7 +972,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                 const d = Math.hypot(targetEnt.x - proj.x, targetEnt.y - proj.y);
                                 if (d < zoneR) {
                                     const attacker = proj.sourceId ? entityMap.get(proj.sourceId) : undefined;
-                                    applyDamage(targetEnt, proj.damage * 0.4, attacker);
+                                    applyDamage(targetEnt, proj.damage * (proj.areaMultiplier || 1), attacker);
                                 }
                             }
                         });
@@ -960,7 +986,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 const stepY = (dy / dist) * proj.speed * delta;
                 proj.x += stepX;
                 proj.y += stepY;
-            proj.distanceTraveled = (proj.distanceTraveled || 0) + Math.hypot(stepX, stepY);
+                proj.distanceTraveled = (proj.distanceTraveled || 0) + Math.hypot(stepX, stepY);
             }
 
             // Removing Piercing projectiles if they go too far
@@ -1028,11 +1054,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         // Demon base
         const hpRatio = Math.max(0, stateRef.current.baseHp / stateRef.current.maxBaseHp);
         const baseColor = hpRatio > 0.5 ? 0x44aaff : hpRatio > 0.25 ? 0xffaa00 : 0xff3333;
-        bg.lineStyle(3, baseColor, 0.9); bg.drawCircle(DEMON_BASE.x, DEMON_BASE.y, 42); bg.lineStyle(0);
-        bg.beginFill(0x220000); bg.drawCircle(DEMON_BASE.x, DEMON_BASE.y, 38); bg.endFill();
-        bg.beginFill(0xff2200); bg.drawCircle(DEMON_BASE.x, DEMON_BASE.y, 12); bg.endFill();
-        bg.beginFill(0x111111); bg.drawRoundedRect(DEMON_BASE.x - 45, DEMON_BASE.y + 48, 90, 10, 3);
-        bg.beginFill(baseColor); bg.drawRoundedRect(DEMON_BASE.x - 45, DEMON_BASE.y + 48, 90 * hpRatio, 10, 3); bg.endFill();
+        bg.lineStyle(5, baseColor, 0.9); bg.drawCircle(DEMON_BASE.x, DEMON_BASE.y, 70); bg.lineStyle(0);
+        bg.beginFill(0x220000); bg.drawCircle(DEMON_BASE.x, DEMON_BASE.y, 65); bg.endFill();
+        bg.beginFill(0xff2200); bg.drawCircle(DEMON_BASE.x, DEMON_BASE.y, 25); bg.endFill();
+        bg.beginFill(0x111111); bg.drawRoundedRect(DEMON_BASE.x - 75, DEMON_BASE.y + 80, 150, 14, 4);
+        bg.beginFill(baseColor); bg.drawRoundedRect(DEMON_BASE.x - 75, DEMON_BASE.y + 80, 150 * hpRatio, 14, 4); bg.endFill();
 
         // (Hero base rendering removed)
 
@@ -1048,7 +1074,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
         });
         stateRef.current.entities.forEach(ent => {
-            const sz = ent.faction === 'HERO' ? 9 : 11;
+            const sz = ent.faction === 'HERO' ? 15 : 18;
             const isElite = ent.faction === 'HERO' && stateRef.current.eliteIds.has(ent.id);
             let g = entityGfxPool.current.get(ent.id);
             if (!g) {
@@ -1076,12 +1102,12 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             g.x = ent.x; g.y = ent.y;
             // Update HP bar (cheap: clear + redraw child)
             const hpR = Math.max(0, ent.hp / ent.maxHp);
-            const barW = sz * 2 + 4;
+            const barW = sz * 2 + 10;
             const hpBar = g.children[0] as PIXI.Graphics;
             hpBar.clear();
-            hpBar.beginFill(0x000000, 0.7); hpBar.drawRect(-barW / 2, -sz - 9, barW, 5);
+            hpBar.beginFill(0x000000, 0.7); hpBar.drawRect(-barW / 2, -sz - 15, barW, 8);
             const barC = hpR > 0.5 ? 0x44ff44 : hpR > 0.25 ? 0xffaa00 : 0xff3333;
-            hpBar.beginFill(barC); hpBar.drawRect(-barW / 2, -sz - 9, barW * hpR, 5); hpBar.endFill();
+            hpBar.beginFill(barC); hpBar.drawRect(-barW / 2, -sz - 15, barW * hpR, 8); hpBar.endFill();
 
             // --- Area Visualization (Aura) ---
             if (ent.faction === 'DEMON' && ent.passiveAbilities) {
@@ -1133,7 +1159,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             } else if (proj.style === 'arrow') {
                 proj.trail.forEach((pt, ti) => {
                     g!.beginFill(proj.color, (ti / proj.trail.length) * 0.4);
-                    g!.drawCircle(pt.x - proj.x, pt.y - proj.y, 1.5); g!.endFill();
+                    g!.drawCircle(pt.x - proj.x, pt.y - proj.y, 3); g!.endFill();
                 });
                 g.lineStyle(2, proj.color, 1);
                 const len = 14;
@@ -1165,7 +1191,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             pb.clear();
             stateRef.current.particles.forEach(p => {
                 pb.beginFill(p.color, Math.min(1, p.life / 30));
-                pb.drawCircle(p.x, p.y, 2.5); pb.endFill();
+                pb.drawCircle(p.x, p.y, 4); pb.endFill();
             });
         }
 
@@ -1178,7 +1204,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         stateRef.current.floatingTexts.forEach(ft => {
             let t = floatTextPool.current.get(ft.id);
             if (!t) {
-                t = new PIXI.Text(ft.text, { fontSize: 13, fill: ft.color, fontWeight: 'bold', dropShadow: true, dropShadowDistance: 1, dropShadowAlpha: 0.8 });
+                t = new PIXI.Text(ft.text, { fontSize: 20, fill: ft.color, fontWeight: 'bold', dropShadow: true, dropShadowDistance: 1, dropShadowAlpha: 0.8 });
                 t.anchor.set(0.5); fl.addChild(t); floatTextPool.current.set(ft.id, t);
             }
             t.alpha = ft.life / ft.maxLife;

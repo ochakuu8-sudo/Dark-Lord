@@ -4,13 +4,20 @@ import React, { createContext, useContext, useState } from 'react';
 import { ALL_RECIPES } from '../game/config';
 import type { Recipe } from '../game/config';
 
-export type GamePhase = 'TITLE' | 'PREPARATION' | 'BATTLE' | 'RESULT';
+export type GamePhase = 'TITLE' | 'PREPARATION' | 'RITUAL' | 'BATTLE' | 'RESULT';
+
+export interface SummonedUnit {
+    id: string;      // 個体識別用
+    type: string;    // 'orc_bone' 等
+    attackBonus: number;
+    hpBonus: number;
+}
 
 interface GameState {
     phase: GamePhase;
     setPhase: (phase: GamePhase) => void;
-    summonedMonsters: string[];
-    addSummonedMonster: (monster: string) => void;
+    summonedMonsters: SummonedUnit[];
+    addSummonedMonster: (unit: SummonedUnit) => void;
     clearSummonedMonsters: () => void;
     
     unlockedRecipes: string[];
@@ -32,13 +39,17 @@ interface GameState {
     pendingPuzzlePieces: number[];
     addPendingPuzzlePiece: (color: number) => void;
     consumePendingPuzzlePieces: () => number[];
+
+    // 儀式盤面の永続化 (BlockData[] の 2次元配列)
+    ritualGrid: (any | null)[][];
+    saveRitualGrid: (grid: (any | null)[][]) => void;
 }
 
 const GameContext = createContext<GameState | undefined>(undefined);
 
 export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [phase, setPhase] = useState<GamePhase>('TITLE');
-    const [summonedMonsters, setSummonedMonsters] = useState<string[]>([]);
+    const [summonedMonsters, setSummonedMonsters] = useState<SummonedUnit[]>([]);
     
     // レシピ装備システム (6枠)
     const [unlockedRecipes, setUnlockedRecipes] = useState<string[]>(ALL_RECIPES.map(r => r.id)); // 初期解放
@@ -51,69 +62,82 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const activeRecipes = equippedRecipes
         .map(id => ALL_RECIPES.find(r => r.id === id))
         .filter((r): r is Recipe => r !== undefined);
-
+ 
     const [currentDay, setCurrentDay] = useState<number>(1);
     const [gold, setGold] = useState<number>(100);
     const [ownedRelics, setOwnedRelics] = useState<string[]>([]);
-
+    const [ritualGrid, setRitualGrid] = useState<(any | null)[][]>([]);
+ 
     const [pendingPuzzlePieces, setPendingPuzzlePieces] = useState<number[]>([]);
+ 
+    const addSummonedMonster = React.useCallback((unit: SummonedUnit) => {
+        setSummonedMonsters(prev => [unit, ...prev]);
+    }, []);
 
-    const addSummonedMonster = (monster: string) => {
-        setSummonedMonsters(prev => [monster, ...prev]);
-    };
-
-    const clearSummonedMonsters = () => {
+    const clearSummonedMonsters = React.useCallback(() => {
         setSummonedMonsters([]);
-    };
+    }, []);
 
-    const addPendingPuzzlePiece = (color: number) => {
+    const addPendingPuzzlePiece = React.useCallback((color: number) => {
         setPendingPuzzlePieces(prev => [...prev, color]);
-    };
+    }, []);
 
-    const consumePendingPuzzlePieces = () => {
-        const current = [...pendingPuzzlePieces];
-        if (current.length > 0) {
-            setPendingPuzzlePieces([]);
-        }
+    const consumePendingPuzzlePieces = React.useCallback(() => {
+        let current: number[] = [];
+        setPendingPuzzlePieces(prev => {
+            current = [...prev];
+            return [];
+        });
         return current;
-    };
+    }, []);
 
-    const unlockRecipe = (recipeId: string) => {
-        if (!unlockedRecipes.includes(recipeId)) {
-            setUnlockedRecipes(prev => [...prev, recipeId]);
-        }
-    };
+    const unlockRecipe = React.useCallback((recipeId: string) => {
+        setUnlockedRecipes(prev => {
+            if (prev.includes(recipeId)) return prev;
+            return [...prev, recipeId];
+        });
+    }, []);
 
-    const equipRecipe = (slotIndex: number, recipeId: string | null) => {
+    const equipRecipe = React.useCallback((slotIndex: number, recipeId: string | null) => {
         setEquippedRecipes(prev => {
             const newEquip = [...prev];
             newEquip[slotIndex] = recipeId;
             return newEquip;
         });
-    };
+    }, []);
 
-    const incrementDay = () => {
+    const incrementDay = React.useCallback(() => {
         setCurrentDay(prev => prev + 1);
-    };
+    }, []);
 
-    const addGold = (amount: number) => {
+    const addGold = React.useCallback((amount: number) => {
         setGold(prev => prev + amount);
-    };
+    }, []);
 
-    const spendGold = (amount: number) => {
-        if (gold >= amount) {
-            setGold(prev => prev - amount);
-            return true;
-        }
-        return false;
-    };
-    const addRelic = (relicId: string) => {
-        if (!ownedRelics.includes(relicId)) {
-            setOwnedRelics(prev => [...prev, relicId]);
-        }
-    };
+    const spendGold = React.useCallback((amount: number) => {
+        let success = false;
+        setGold(prev => {
+            if (prev >= amount) {
+                success = true;
+                return prev - amount;
+            }
+            return prev;
+        });
+        return success;
+    }, []);
 
-    const resetGame = () => {
+    const addRelic = React.useCallback((relicId: string) => {
+        setOwnedRelics(prev => {
+            if (prev.includes(relicId)) return prev;
+            return [...prev, relicId];
+        });
+    }, []);
+
+    const saveRitualGrid = React.useCallback((grid: (any | null)[][]) => {
+        setRitualGrid(grid);
+    }, []);
+
+    const resetGame = React.useCallback(() => {
         setSummonedMonsters([]);
         setEquippedRecipes([
             ALL_RECIPES[0]?.id || null, 
@@ -122,9 +146,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             null, null, null
         ]);
         setCurrentDay(1);
+        setGold(100);
         setOwnedRelics([]);
         setPendingPuzzlePieces([]);
-    };
+        setRitualGrid([]);
+    }, []);
 
     return (
         <GameContext.Provider value={{
@@ -134,6 +160,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             currentDay, incrementDay,
             gold, addGold, spendGold,
             ownedRelics, addRelic,
+            ritualGrid, saveRitualGrid,
             resetGame,
             pendingPuzzlePieces, addPendingPuzzlePiece, consumePendingPuzzlePieces
         }}>

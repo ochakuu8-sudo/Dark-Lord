@@ -198,6 +198,13 @@ export const COLOR_HEX = [
     '#8844ff',
 ];
 
+export const PIECE_EMOJIS: Record<number, string> = {
+    0: '🦴',
+    1: '🥩',
+    2: '🔮',
+    9: '❓',
+};
+
 export const ROWS = 7;
 export const COLS = 7;
 export const BLOCK_SIZE = 70; // 7x7盤面に合わせてブロックサイズを調整 (7x70 = 490px)
@@ -214,5 +221,5 @@ export interface Relic {
 }
 
 export const RELICS: Relic[] = [
-    { id: 'mana_prism', name: '魔力の結晶源', description: 'パズルフェーズでのピース補充間隔が2秒に短縮されるが、拠点の最大HPが半減する。', price: 150, icon: '💎' },
+    { id: 'void_contract', name: '虚空の契約', description: '儀式の盤面が 8x8 に拡大される。', price: 200, icon: '📜' },
 ];
