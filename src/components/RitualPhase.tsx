@@ -33,9 +33,11 @@ const RitualPhase: React.FC = () => {
     const linksLayerRef = useRef<PIXI.Container | null>(null);
     const blocksLayerRef = useRef<PIXI.Container | null>(null);
     const usageLayerRef = useRef<PIXI.Graphics | null>(null);
-    const blockGraphicsMap = useRef<Map<string, PIXI.Graphics>>(new Map());
+    const blockGraphicsMap = useRef<Map<string, PIXI.Container>>(new Map());
     const groupGraphicsMap = useRef<Map<string, PIXI.Graphics>>(new Map());
+    const pieceTexturesRef = useRef<Map<number, PIXI.Texture>>(new Map());
     const interactionParams = useRef({ selectedGroup: [] as BlockData[], isDragging: false });
+    const isInitialLoad = useRef(true);
     
     // 状態の初期化
     const [grid, setGrid] = useState<(BlockData | null)[][]>(() => 
@@ -51,8 +53,38 @@ const RitualPhase: React.FC = () => {
 
     const blockPool = useRef<number[]>([]);
     const activeRecipesRef = useRef<(Recipe)[]>([]);
+    const precomputedPatterns = useRef<{ recipe: Recipe, patterns: number[][][] }[]>([]);
 
     const generateId = () => Math.random().toString(36).substr(2, 9);
+
+    const initTextures = useCallback((app: PIXI.Application) => {
+        [0, 1, 2].forEach(type => {
+            const g = new PIXI.Graphics();
+            const color = COLORS[type] ?? 0xffffff;
+            const emoji = PIECE_EMOJIS[type] || '❓';
+            
+            // 背景
+            g.beginFill(0x222222); 
+            g.drawRoundedRect(2, 2, curBlockSize - 4, curBlockSize - 4, 12);
+            g.endFill();
+
+            // 枠
+            g.lineStyle(2, color, 0.4);
+            g.drawRoundedRect(6, 6, curBlockSize - 12, curBlockSize - 12, 10);
+            
+            // 絵文字テキスト
+            const style = new PIXI.TextStyle({ fontSize: curBlockSize * 0.6, align: 'center' });
+            const txt = new PIXI.Text(emoji, style);
+            txt.anchor.set(0.5);
+            txt.x = curBlockSize / 2;
+            txt.y = curBlockSize / 2;
+            g.addChild(txt);
+
+            const tex = app.renderer.generateTexture(g);
+            pieceTexturesRef.current.set(type, tex);
+            g.destroy({ children: true });
+        });
+    }, [curBlockSize]);
 
     const initPool = useCallback(() => {
         const pool: number[] = [];
@@ -83,44 +115,14 @@ const RitualPhase: React.FC = () => {
 
     const calculateExpectedSummons = useCallback((currentGrid: (BlockData | null)[][], currentBoostTiles: {r: number, c: number, type: string}[]) => {
         if (!currentGrid || currentGrid.length < curRows) return;
-        const recipes = activeRecipesRef.current;
         const baseUnits: SummonedUnit[] = [];
         const usedIds = new Set<string>();
         const foundMatchGroups = new Set<string>();
 
-        const rotatePattern = (pattern: number[][]): number[][] => {
-            if (!pattern || pattern.length === 0 || !pattern[0]) return [];
-            const rows = pattern.length;
-            const cols = pattern[0].length;
-            const rotated = Array(cols).fill(0).map(() => Array(rows).fill(0));
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    if (pattern[r]) rotated[c][rows - 1 - r] = pattern[r][c];
-                }
-            }
-            return rotated;
-        };
-
-        const getUniquePatterns = (basePattern: number[][]): number[][][] => {
-            if (!basePattern) return [];
-            const patterns = [basePattern];
-            let current = basePattern;
-            for (let i = 0; i < 3; i++) {
-                current = rotatePattern(current);
-                if (current.length === 0) break;
-                const isDuplicate = patterns.some(p => JSON.stringify(p) === JSON.stringify(current));
-                if (!isDuplicate) patterns.push(current);
-            }
-            return patterns;
-        };
-
         for (let r = 0; r < curRows; r++) {
             for (let c = 0; c < curCols; c++) {
-                recipes.forEach(recipe => {
-                    if (!recipe || !recipe.pattern) return;
-                    const uniquePatterns = getUniquePatterns(recipe.pattern);
-                    uniquePatterns.forEach(patternToMatch => {
-                        if (!patternToMatch || patternToMatch.length === 0 || !patternToMatch[0]) return;
+                precomputedPatterns.current.forEach(({ recipe, patterns }) => {
+                    patterns.forEach(patternToMatch => {
                         const pRows = patternToMatch.length;
                         const pCols = patternToMatch[0].length;
                         if (r + pRows > curRows || c + pCols > curCols) return;
@@ -132,13 +134,10 @@ const RitualPhase: React.FC = () => {
 
                         for (let pr = 0; pr < pRows && valid; pr++) {
                             const pRow = patternToMatch[pr];
-                            if (!pRow) { valid = false; break; }
                             for (let pc = 0; pc < pCols && valid; pc++) {
                                 const exp = pRow[pc];
                                 if (exp === -1) continue;
-                                const gridRow = currentGrid[r + pr];
-                                if (!gridRow) { valid = false; break; }
-                                const block = gridRow[c + pc];
+                                const block = currentGrid[r + pr]?.[c + pc];
                                 if (!block) { valid = false; break; }
                                 if (exp === 9) {
                                     if (variableType === null) variableType = block.type;
@@ -155,7 +154,10 @@ const RitualPhase: React.FC = () => {
                             }
                         }
                         if (valid && matches.length > 0) {
-                            const matchGroupStr = matches.map(b => b.id).sort().join(',');
+                            // optimize: use ID sequence as a unique key without sorting strings
+                            const sortedIds = matches.map(b => b.id).sort();
+                            const matchGroupStr = sortedIds.join('|'); 
+                            
                             if (!foundMatchGroups.has(matchGroupStr)) {
                                 foundMatchGroups.add(matchGroupStr);
                                 let resultId = recipe.id;
@@ -210,8 +212,8 @@ const RitualPhase: React.FC = () => {
         setUsedBlocks(usedIds);
     }, [curRows, curCols]);
 
-    const scatterPieces = useCallback((count: number, forceSingle: boolean = false) => {
-        const newGrid = gridRef.current.map(row => (row ? [...row] : Array(curCols).fill(null)));
+    const scatterPiecesToGrid = useCallback((currentGrid: (BlockData | null)[][], count: number, forceSingle: boolean = false): (BlockData | null)[][] => {
+        const newGrid = currentGrid.map(row => (row ? [...row] : Array(curCols).fill(null)));
         for (let i = 0; i < count; i++) {
             const emptyLocations: { r: number; c: number }[] = [];
             for (let r = 0; r < curRows; r++) {
@@ -240,80 +242,110 @@ const RitualPhase: React.FC = () => {
                 newGrid[loc.r][loc.c] = { type: drawFromPool(), row: loc.r, col: loc.c, id: generateId() };
             }
         }
-        gridRef.current = newGrid;
-        setGrid([...newGrid.map(row => [...row])]);
+        return newGrid;
     }, [drawFromPool, curRows, curCols]);
 
+    const scatterPieces = useCallback((count: number, forceSingle: boolean = false) => {
+        const newGrid = scatterPiecesToGrid(gridRef.current, count, forceSingle);
+        gridRef.current = newGrid;
+        setGrid([...newGrid.map(row => [...row])]);
+    }, [scatterPiecesToGrid]);
+
+    const linksNeedsUpdate = useRef(false);
+
     const renderLinks = useCallback(() => {
-        if (!linksLayerRef.current) return;
+        if (!linksLayerRef.current || !linksNeedsUpdate.current) return;
+        
         const linkLayer = linksLayerRef.current;
         const currentGroupIds = new Set<string>();
-        const processedGroups = new Set<string>();
-
+        
+        // Group blocks by groupId first (O(N))
+        const groups = new Map<string, BlockData[]>();
         gridRef.current.forEach(row => {
-            if (!row) return;
-            row.forEach(block => {
-                if (!block || !block.groupId || processedGroups.has(block.groupId)) return;
-                let partner: BlockData | null = null;
-                gridRef.current.forEach(r => {
-                    if (!r) return;
-                    r.forEach(b => {
-                        if (b && b.groupId === block.groupId && b.id !== block.id) partner = b;
-                    });
-                });
-
-                if (partner) {
-                    const g = blockGraphicsMap.current.get(block.id);
-                    const pg = blockGraphicsMap.current.get((partner as BlockData).id);
-                    if (g && pg) {
-                        currentGroupIds.add(block.groupId);
-                        let outline = groupGraphicsMap.current.get(block.groupId);
-                        if (!outline) {
-                            outline = new PIXI.Graphics();
-                            linkLayer.addChild(outline);
-                            groupGraphicsMap.current.set(block.groupId, outline);
-                        }
-                        outline.clear(); outline.lineStyle(4, 0xffffff, 0.8);
-                        const minX = Math.min(g.x, pg.x) - curBlockSize / 2 + 4;
-                        const minY = Math.min(g.y, pg.y) - curBlockSize / 2 + 4;
-                        const maxX = Math.max(g.x, pg.x) + curBlockSize / 2 - 4;
-                        const maxY = Math.max(g.y, pg.y) + curBlockSize / 2 - 4;
-                        outline.drawRoundedRect(0, 0, maxX - minX, maxY - minY, 12);
-                        outline.x = minX; outline.y = minY;
-                        processedGroups.add(block.groupId);
-                    }
+            row?.forEach(block => {
+                if (block && block.groupId) {
+                    if (!groups.has(block.groupId)) groups.set(block.groupId, []);
+                    groups.get(block.groupId)!.push(block);
                 }
             });
         });
 
+        // Draw links for each group (O(G))
+        groups.forEach((members, groupId) => {
+            if (members.length < 2) return;
+            
+            const graphics = members.map(m => blockGraphicsMap.current.get(m.id)).filter(g => !!g) as PIXI.Container[];
+            if (graphics.length < 2) return;
+
+            currentGroupIds.add(groupId);
+            let outline = groupGraphicsMap.current.get(groupId);
+            if (!outline) {
+                outline = new PIXI.Graphics();
+                linkLayer.addChild(outline);
+                groupGraphicsMap.current.set(groupId, outline);
+            }
+            
+            outline.clear();
+            outline.lineStyle(4, 0xffffff, 0.8);
+            
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            graphics.forEach(g => {
+                minX = Math.min(minX, g.x);
+                minY = Math.min(minY, g.y);
+                maxX = Math.max(maxX, g.x);
+                maxY = Math.max(maxY, g.y);
+            });
+
+            const drawMinX = minX - curBlockSize / 2 + 4;
+            const drawMinY = minY - curBlockSize / 2 + 4;
+            const drawMaxX = maxX + curBlockSize / 2 - 4;
+            const drawMaxY = maxY + curBlockSize / 2 - 4;
+
+            outline.drawRoundedRect(0, 0, drawMaxX - drawMinX, drawMaxY - drawMinY, 12);
+            outline.x = drawMinX;
+            outline.y = drawMinY;
+        });
+
+        // Cleanup old groups
         groupGraphicsMap.current.forEach((g, gid) => {
             if (!currentGroupIds.has(gid)) {
-                linkLayer.removeChild(g); g.destroy();
+                linkLayer.removeChild(g);
+                g.destroy();
                 groupGraphicsMap.current.delete(gid);
             }
         });
+        
+        linksNeedsUpdate.current = false;
     }, [curBlockSize]);
 
+    const requestLinksUpdate = useCallback(() => {
+        linksNeedsUpdate.current = true;
+    }, []);
+
     const createBlockGraphics = useCallback((block: BlockData) => {
-        const g = new PIXI.Graphics();
-        const color = COLORS[block.type] ?? 0xffffff;
-        const emoji = PIECE_EMOJIS[block.type] || '❓';
-        
-        g.beginFill(0x222222); 
-        g.drawRoundedRect(-curBlockSize / 2 + 2, -curBlockSize / 2 + 2, curBlockSize - 4, curBlockSize - 4, 12);
-        g.endFill();
+        // Use cached texture if available
+        const tex = pieceTexturesRef.current.get(block.type);
+        let sprite: PIXI.Sprite | null = null;
+        if (tex) {
+            sprite = new PIXI.Sprite(tex);
+            sprite.anchor.set(0.5);
+        }
 
-        g.lineStyle(2, color, 0.4);
-        g.drawRoundedRect(-curBlockSize / 2 + 6, -curBlockSize / 2 + 6, curBlockSize - 12, curBlockSize - 12, 10);
-        
-        const style = new PIXI.TextStyle({ fontSize: curBlockSize * 0.6, align: 'center' });
-        const txt = new PIXI.Text(emoji, style);
-        txt.anchor.set(0.5);
-        g.addChild(txt);
+        const container = new PIXI.Container();
+        if (sprite) {
+            container.addChild(sprite);
+        } else {
+            // Fallback (should not happen after texture init)
+            const g = new PIXI.Graphics();
+            g.beginFill(0x222222); 
+            g.drawRoundedRect(-curBlockSize / 2 + 2, -curBlockSize / 2 + 2, curBlockSize - 4, curBlockSize - 4, 12);
+            g.endFill();
+            container.addChild(g);
+        }
 
-        g.eventMode = 'static'; g.cursor = 'pointer';
+        container.eventMode = 'static'; container.cursor = 'pointer';
 
-        g.on('pointerdown', (event: PIXI.FederatedPointerEvent) => {
+        container.on('pointerdown', (event: PIXI.FederatedPointerEvent) => {
             if (interactionParams.current.isDragging) return;
             let targetBlock: BlockData | null = null;
             for (let r = 0; r < curRows && !targetBlock; r++) {
@@ -364,7 +396,7 @@ const RitualPhase: React.FC = () => {
                     const gm = blockGraphicsMap.current.get(pos.id);
                     if (gm) { gm.x = pos.x + dx; gm.y = pos.y + dy; }
                 });
-                renderLinks();
+                requestLinksUpdate();
             };
             const onUp = () => {
                 window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp);
@@ -425,8 +457,8 @@ const RitualPhase: React.FC = () => {
             window.addEventListener('pointermove', onMove);
             window.addEventListener('pointerup', onUp);
         });
-        return g;
-    }, [renderLinks, curRows, curCols, curBlockSize, curWidth, curHeight]);
+        return container;
+    }, [curRows, curCols, curBlockSize, curWidth, curHeight, requestLinksUpdate]);
 
     const renderGrid = useCallback(() => {
         if (!blocksLayerRef.current || !usageLayerRef.current) return;
@@ -439,14 +471,22 @@ const RitualPhase: React.FC = () => {
             row.forEach(block => {
                 if (!block) return; curIds.add(block.id);
                 let g = blockGraphicsMap.current.get(block.id);
-                if (!g) {
-                    g = createBlockGraphics(block);
-                    g.x = block.col * curBlockSize + curBlockSize / 2; g.y = -curBlockSize;
-                    gsap.to(g, { y: block.row * curBlockSize + curBlockSize / 2, duration: 0.25, ease: 'bounce.out', onUpdate: renderLinks });
-                    blocksLayerRef.current!.addChild(g); blockGraphicsMap.current.set(block.id, g);
-                }
                 const tx = block.col * curBlockSize + curBlockSize / 2;
                 const ty = block.row * curBlockSize + curBlockSize / 2;
+
+                if (!g) {
+                    const newG = createBlockGraphics(block);
+                    if (isInitialLoad.current) {
+                        newG.x = tx; newG.y = ty;
+                    } else {
+                        newG.x = tx; newG.y = -curBlockSize;
+                        gsap.to(newG, { y: ty, duration: 0.25, ease: 'bounce.out', onUpdate: requestLinksUpdate });
+                    }
+                    blocksLayerRef.current!.addChild(newG); 
+                    blockGraphicsMap.current.set(block.id, newG);
+                    g = newG;
+                }
+                
                 const dragging = interactionParams.current.isDragging && interactionParams.current.selectedGroup.some(m => m.id === block.id);
 
                 if (usedBlocks.has(block.id)) {
@@ -454,28 +494,76 @@ const RitualPhase: React.FC = () => {
                     usageGfx.drawRoundedRect(tx - curBlockSize / 2 - 3, ty - curBlockSize / 2 - 3, curBlockSize + 6, curBlockSize + 6, 12);
                 }
 
-                if (!dragging && (Math.abs(g.x - tx) > 1 || Math.abs(g.y - ty) > 1))
-                    gsap.to(g, { x: tx, y: ty, duration: 0.1, ease: 'power2.out', onUpdate: renderLinks });
+                if (g && !dragging) {
+                    if (isInitialLoad.current) {
+                        g.x = tx; g.y = ty;
+                    } else if (Math.abs(g.x - tx) > 1 || Math.abs(g.y - ty) > 1) {
+                        gsap.to(g, { x: tx, y: ty, duration: 0.1, ease: 'power2.out', onUpdate: requestLinksUpdate });
+                    }
+                }
             });
         });
+        
         blockGraphicsMap.current.forEach((g, id) => {
             if (!curIds.has(id)) {
                 gsap.killTweensOf(g);
                 if (!g.destroyed) {
-                    gsap.to(g.scale, { x: 0, y: 0, duration: 0.1, onComplete: () => { if (!g.destroyed) g.destroy(); } });
+                    if (isInitialLoad.current) {
+                        g.destroy();
+                    } else {
+                        gsap.to(g.scale, { x: 0, y: 0, duration: 0.1, onComplete: () => { if (!g.destroyed) g.destroy(); } });
+                    }
                 }
                 blockGraphicsMap.current.delete(id);
             }
         });
+        
+        if (isInitialLoad.current) {
+            isInitialLoad.current = false;
+            requestLinksUpdate();
+        }
+        
         renderLinks();
-    }, [createBlockGraphics, renderLinks, usedBlocks, curBlockSize]);
+    }, [createBlockGraphics, renderLinks, usedBlocks, curBlockSize, requestLinksUpdate]);
 
-    // Resets on mount
     useEffect(() => {
         clearSummonedMonsters();
-        activeRecipesRef.current = equippedRecipes
+        
+        const recipes = equippedRecipes
             .map(id => ALL_RECIPES.find(r => r.id === id))
             .filter((r): r is Recipe => !!r);
+        
+        activeRecipesRef.current = recipes;
+
+        const rotatePattern = (pattern: number[][]): number[][] => {
+            if (!pattern || pattern.length === 0 || !pattern[0]) return [];
+            const r = pattern.length;
+            const c = pattern[0].length;
+            const rotated = Array(c).fill(0).map(() => Array(r).fill(0));
+            for (let i = 0; i < r; i++) {
+                for (let j = 0; j < c; j++) {
+                    rotated[j][r - 1 - i] = pattern[i][j];
+                }
+            }
+            return rotated;
+        };
+
+        const getUniquePatterns = (basePattern: number[][]): number[][][] => {
+            const patterns = [basePattern];
+            let current = basePattern;
+            for (let i = 0; i < 3; i++) {
+                current = rotatePattern(current);
+                const isDuplicate = patterns.some(p => JSON.stringify(p) === JSON.stringify(current));
+                if (!isDuplicate) patterns.push(current);
+            }
+            return patterns;
+        };
+
+        precomputedPatterns.current = recipes.map(r => ({
+            recipe: r,
+            patterns: getUniquePatterns(r.pattern)
+        }));
+
         initPool();
     }, [equippedRecipes, clearSummonedMonsters, initPool]);
 
@@ -488,19 +576,19 @@ const RitualPhase: React.FC = () => {
             initializedGrid = Array(curRows).fill(null).map(() => Array(curCols).fill(null));
         }
         
+        if (!storedGrid || storedGrid.length !== curRows) {
+            initializedGrid = scatterPiecesToGrid(initializedGrid, 6, true); 
+        }
+
         gridRef.current = initializedGrid;
         setGrid([...initializedGrid.map(row => [...row])]);
-        
-        if (!storedGrid || storedGrid.length !== curRows) {
-            scatterPieces(6, true); 
-        }
 
         const tiles: {r: number, c: number, type: 'ATK'}[] = [];
         for(let i=0; i < (3 + Math.floor(Math.random() * 3)); i++) {
             tiles.push({ r: Math.floor(Math.random() * curRows), c: Math.floor(Math.random() * curCols), type: 'ATK' });
         }
         setBoostTiles(tiles);
-    }, [curRows, curCols, storedGrid, scatterPieces]);
+    }, [curRows, curCols, storedGrid, scatterPiecesToGrid]);
 
     // Calculate Expected Summons on grid/boost change
     useEffect(() => {
@@ -532,6 +620,9 @@ const RitualPhase: React.FC = () => {
         const usageLayer = new PIXI.Graphics(); stage.addChild(usageLayer); usageLayerRef.current = usageLayer;
         const bLayer = new PIXI.Container(); bLayer.sortableChildren = true; stage.addChild(bLayer); blocksLayerRef.current = bLayer;
         const linkLayer = new PIXI.Container(); stage.addChild(linkLayer); linksLayerRef.current = linkLayer;
+
+        initTextures(app);
+        app.ticker.add(renderLinks);
 
         boostTiles.forEach(tile => {
             const container = new PIXI.Container();

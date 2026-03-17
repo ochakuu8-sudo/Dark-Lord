@@ -105,6 +105,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
     const stateRef = useRef({
         entities: [] as EntityState[],
+        pendingHeroes: [] as { entity: EntityState, spawnAtFrames: number }[],
         projectiles: [] as Projectile[],
         particles: [] as { id: string, x: number, y: number, vx: number, vy: number, color: number, life: number }[],
         floatingTexts: [] as FloatingText[],
@@ -204,7 +205,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         });
 
         stateRef.current.entities = initialEntities;
-        stateRef.current.nextWaveCountdown = 300; // 5秒猶予
+        stateRef.current.nextWaveCountdown = 30; // 0.5秒猶予（即時開始）
     }, [summonedMonsters]);
 
     // ── Register external spawn callback ──
@@ -298,41 +299,54 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     }, []);
 
     // ── Wave composition ──────────────────
-    const buildWave = useCallback((waveNum: number): { type: HeroType, count: number }[] => {
+    // ── Wave composition (Day-based patterns) ──────────────────
+    const buildWave = useCallback((): { type: HeroType, count: number }[] => {
         const day = currentDay;
+        const comp: { type: HeroType, count: number }[] = [];
+        
+        // Base difficulty scaling
+        const totalCount = 10 + day * 5;
+        
+        // Pattern logic: Rotate or pick patterns based on day
+        const patternType = day % 4; 
+        
         if (day === 1) {
-            if (waveNum === 1) return [{ type: '村人', count: 8 }];
-            if (waveNum === 2) return [{ type: '村人', count: 12 }, { type: '農夫', count: 4 }];
-            if (waveNum === 3) return [{ type: '村人', count: 15 }, { type: '農夫', count: 8 }];
-            return [{ type: '弓兵', count: 8 }, { type: '剣士', count: 6 }, { type: '村人', count: 10 }];
-        }
-        if (day === 2) {
-            const base = 8 + waveNum * 4;
-            if (waveNum <= 2) return [{ type: '農夫', count: base }, { type: '弓兵', count: Math.floor(base / 2) }, { type: '剣士', count: 4 }];
-            if (waveNum === 3) return [{ type: '剣士', count: 10 }, { type: '弓兵', count: 8 }, { type: '農夫', count: 8 }];
-            return [{ type: '重騎士', count: 4 }, { type: '剣士', count: 10 }, { type: '弓兵', count: 10 }];
-        }
-        if (day === 3) {
-            if (waveNum === 1) return [{ type: '剣士', count: 10 }, { type: 'シーフ', count: 5 }];
-            if (waveNum === 2) return [{ type: '弓兵', count: 10 }, { type: 'シーフ', count: 8 }, { type: '重騎士', count: 3 }];
-            if (waveNum === 3) return [{ type: '剣士', count: 12 }, { type: '魔法使い', count: 4 }, { type: 'シーフ', count: 8 }];
-            return [{ type: '重騎士', count: 6 }, { type: '大魔道士', count: 2 }, { type: 'シーフ', count: 10 }];
-        }
-        if (day === 4) {
-            if (waveNum <= 2) return [{ type: '剣士', count: 12 }, { type: 'プリースト', count: 2 }, { type: '弓兵', count: 6 }];
-            if (waveNum === 3) return [{ type: '重騎士', count: 8 }, { type: 'プリースト', count: 4 }, { type: '魔法使い', count: 4 }];
-            return [{ type: 'パラディン', count: 2 }, { type: 'プリースト', count: 4 }, { type: '剣士', count: 12 }, { type: '弓兵', count: 8 }];
-        }
-        if (day === 5 || day === 10) {
-            const scale = day === 10 ? 3 : 2;
-            if (waveNum <= 3) return [{ type: 'パラディン', count: 2 * scale }, { type: '聖騎士', count: 4 * scale }, { type: 'プリースト', count: 3 * scale }, { type: '大魔道士', count: 2 * scale }, { type: 'シーフ', count: 6 * scale }];
-            return [{ type: '勇者', count: scale }, { type: 'パラディン', count: 2 * scale }, { type: 'プリースト', count: 4 * scale }, { type: '大魔道士', count: 2 * scale }, { type: 'シーフ', count: 5 * scale }];
+            comp.push({ type: '村人', count: 12 });
+            comp.push({ type: '農夫', count: 3 });
+        } else if (day === 2) {
+            comp.push({ type: '農夫', count: 10 });
+            comp.push({ type: '弓兵', count: 6 });
+            comp.push({ type: '剣士', count: 4 });
+        } else if (patternType === 0) {
+            // Melee Rush
+            comp.push({ type: '剣士', count: Math.floor(totalCount * 0.6) });
+            comp.push({ type: '重騎士', count: Math.floor(totalCount * 0.2) });
+            comp.push({ type: 'プリースト', count: Math.floor(totalCount * 0.1) + 1 });
+        } else if (patternType === 1) {
+            // Ranged focused
+            comp.push({ type: '弓兵', count: Math.floor(totalCount * 0.5) });
+            comp.push({ type: '魔法使い', count: Math.floor(totalCount * 0.2) });
+            comp.push({ type: '重騎士', count: Math.floor(totalCount * 0.2) });
+        } else if (patternType === 2) {
+            // Stealth/Ambush style
+            comp.push({ type: 'シーフ', count: Math.floor(totalCount * 0.6) });
+            comp.push({ type: '剣士', count: Math.floor(totalCount * 0.3) });
+            comp.push({ type: '魔法使い', count: 2 });
+        } else {
+            // Balanced/Elite
+            comp.push({ type: '聖騎士', count: Math.floor(day * 0.8) });
+            comp.push({ type: 'パラディン', count: Math.floor(day * 0.4) });
+            comp.push({ type: '弓兵', count: Math.floor(totalCount * 0.4) });
+            comp.push({ type: 'プリースト', count: 3 });
         }
 
-        const scale = day - 5;
-        if (waveNum <= 2) return [{ type: 'パラディン', count: 2 + scale }, { type: '聖騎士', count: 4 + scale * 2 }, { type: 'プリースト', count: 2 + scale }, { type: 'シーフ', count: 4 + scale * 2 }];
-        if (waveNum === 3) return [{ type: '重騎士', count: 8 + scale * 2 }, { type: '大魔道士', count: 2 + scale }, { type: 'プリースト', count: 4 + scale }];
-        return [{ type: '勇者', count: 1 + Math.floor(scale / 2) }, { type: 'パラディン', count: 4 + scale * 2 }, { type: 'プリースト', count: 4 + scale * 2 }, { type: '大魔道士', count: 3 + scale }];
+        // Add some basic units to fill up
+        const currentTotal = comp.reduce((sum, c) => sum + c.count, 0);
+        if (currentTotal < totalCount) {
+            comp.push({ type: '村人', count: totalCount - currentTotal });
+        }
+
+        return comp;
     }, [currentDay]);
 
     const spawnWave = useCallback(() => {
@@ -341,47 +355,59 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         s.wave++;
         s.waveInProgress = true;
         
-        // 全Wave分の敵を統合して一斉に出現させる
-        const allComposition: { type: HeroType, count: number }[] = [];
-        for (let w = 1; w <= 4; w++) {
-            buildWave(w).forEach(c => {
-                const existing = allComposition.find(x => x.type === c.type);
-                if (existing) existing.count += c.count;
-                else allComposition.push({ ...c });
-            });
-        }
-
+        const composition = buildWave();
         const dayHpMult = 1.0 + (currentDay - 1) * 0.4;
-        const newHeroes: EntityState[] = [];
-        let offset = 0;
         
-        allComposition.forEach(({ type, count }) => {
+        composition.forEach(({ type, count }) => {
             const stats = HERO_ROSTER[type];
             for (let i = 0; i < count; i++) {
-                const isElite = Math.random() < 0.15;
+                const isElite = Math.random() < 0.12;
                 const id = generateId();
                 if (isElite) s.eliteIds.add(id);
 
                 const finalHp = Math.floor(stats.maxHp * (isElite ? 2 : 1) * dayHpMult);
-
-                newHeroes.push({
+                const entity: EntityState = {
                     id, type, faction: 'HERO',
-                    // 右側に広く分散させてスポーン
-                    x: FIELD_WIDTH - 50 - Math.random() * 300,
+                    x: FIELD_WIDTH - 40 - Math.random() * 200,
                     y: 50 + Math.random() * (FIELD_HEIGHT - 100),
-                    hp: finalHp,
-                    maxHp: finalHp,
+                    hp: finalHp, maxHp: finalHp,
                     attack: stats.attack * (isElite ? 1.8 : 1),
                     range: stats.range,
                     speed: stats.speed * (isElite ? 1.15 : 1),
                     cooldown: Math.random() * 40,
                     maxCooldown: stats.maxCooldown,
                     color: isElite ? 0xffd700 : stats.color,
-                });
-                offset++;
+                };
+                
+                // 3秒おき（0, 3, 6, 9秒）のバッチに振り分け
+                const batchIndex = Math.floor(Math.random() * 4); // 0, 1, 2, 3
+                const delay = batchIndex * 180; // 0, 180, 360, 540 フレーム
+                s.pendingHeroes.push({ entity, spawnAtFrames: s.frameCount + delay });
             }
         });
-        s.entities.push(...newHeroes);
+
+        // 5回目（12秒）にボスを出現させる
+        const bossType: HeroType = currentDay >= 5 ? '勇者' : (currentDay >= 3 ? 'パラディン' : '重騎士');
+        const bossStats = HERO_ROSTER[bossType];
+        const bossId = 'boss-' + generateId();
+        s.eliteIds.add(bossId);
+        
+        const bossHp = Math.floor(bossStats.maxHp * 5 * dayHpMult); 
+        const bossEntity: EntityState = {
+            id: bossId, type: 'BOSS ' + bossType, faction: 'HERO',
+            x: FIELD_WIDTH - 60,
+            y: FIELD_HEIGHT / 2,
+            hp: bossHp, maxHp: bossHp,
+            attack: bossStats.attack * 2.5,
+            range: bossStats.range + 50,
+            speed: bossStats.speed * 0.8,
+            cooldown: 0,
+            maxCooldown: bossStats.maxCooldown,
+            color: 0xff0000, 
+        };
+        // ボスはきっかり12秒後 (720フレーム)
+        s.pendingHeroes.push({ entity: bossEntity, spawnAtFrames: s.frameCount + 720 });
+
         setUiState(prev => ({ ...prev, wave: s.wave }));
     }, [buildWave, currentDay]);
 
@@ -450,6 +476,19 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     // ── Main logic ────────────────────────
     const updateLogic = (delta: number) => {
         const s = stateRef.current;
+
+        // ── Sequential Spawning ──────────────
+        if (s.pendingHeroes.length > 0) {
+            const stillPending: typeof s.pendingHeroes = [];
+            s.pendingHeroes.forEach(p => {
+                if (s.frameCount >= p.spawnAtFrames) {
+                    s.entities.push(p.entity);
+                } else {
+                    stillPending.push(p);
+                }
+            });
+            s.pendingHeroes = stillPending;
+        }
 
         // Wave countdown
         if (s.wave < MAX_WAVES && s.nextWaveCountdown > 0) {
@@ -1004,15 +1043,15 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             s.nextWaveCountdown = 480; // 8秒に延長
         }
 
-        // Win condition
-        if (s.wave >= MAX_WAVES && heroCount === 0 && s.baseHp > 0 && !s.phaseEnded) {
+        // Win condition: No active heroes AND no pending heroes
+        if (s.wave >= MAX_WAVES && heroCount === 0 && s.pendingHeroes.length === 0 && s.baseHp > 0 && !s.phaseEnded) {
             s.phaseEnded = true;
             addGold(120 + currentDay * 80);
             // Small delay before transition to show text
             setTimeout(() => {
                 incrementDay();
                 setPhase('PREPARATION');
-            }, 1000);
+            }, 2000); // 2秒待機して余韻を持たせる
         }
 
         // Particles
@@ -1074,7 +1113,8 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
         });
         stateRef.current.entities.forEach(ent => {
-            const sz = ent.faction === 'HERO' ? 15 : 18;
+            const isBoss = ent.id.startsWith('boss-');
+            const sz = isBoss ? 30 : (ent.faction === 'HERO' ? 15 : 18);
             const isElite = ent.faction === 'HERO' && stateRef.current.eliteIds.has(ent.id);
             let g = entityGfxPool.current.get(ent.id);
             if (!g) {
