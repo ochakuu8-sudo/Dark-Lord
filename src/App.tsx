@@ -2,7 +2,6 @@ import React from 'react';
 import { GameProvider, useGame } from './contexts/GameContext';
 import BattlePhase from './components/BattlePhase';
 import PreparationPhase from './components/PreparationPhase';
-import RitualPhase from './components/RitualPhase';
 import ResponsiveWrapper from './components/ResponsiveWrapper';
 import './App.css';
 
@@ -19,8 +18,7 @@ const GameController: React.FC = () => {
         </div>
       )}
       {phase === 'PREPARATION' && <PreparationPhase />}
-      {phase === 'RITUAL' && <RitualPhase />}
-      {phase === 'BATTLE' && <BattlePhase />}
+      {(phase === 'RITUAL' || phase === 'BATTLE') && <BattlePhase />}
       {phase === 'RESULT' && (
         <div className="result-screen">
           <h1>拠点陥落...</h1>
@@ -35,7 +33,7 @@ const GameController: React.FC = () => {
 function App() {
   return (
     <GameProvider>
-      <ResponsiveWrapper logicalWidth={1670} logicalHeight={800}>
+      <ResponsiveWrapper logicalWidth={1150} logicalHeight={700}>
         <GameController />
       </ResponsiveWrapper>
     </GameProvider>

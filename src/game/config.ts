@@ -15,7 +15,23 @@ export interface FusionRecipe {
 // Colors: 0=赤(Fire), 1=青(Water), 2=緑(Earth), 3=黄(Light), 4=紫(Dark)
 
 // 形ごとにロール（Melee=縦3, Tank=2x2, Ranged=横3, Magic=十字）を設定し、各色に用意する
+export const AP_GAUGE_MAX = 100;
+export const AP_GAUGE_PER_MATCH = 20; // 1マッチあたりのゲージ増加量（5マッチ=1AP）
+
 export const ALL_RECIPES: Recipe[] = [
+    {
+        id: 'goblin',
+        name: 'ゴブリン',
+        pattern: [
+            [9, 9, 9] // 同種3マス（どの素材でも可）
+        ],
+        reward: 0,
+        resultMap: {
+            0: 'goblin_bone',
+            1: 'goblin_meat',
+            2: 'goblin_spirit',
+        }
+    },
     {
         id: 'orc',
         name: 'オーク',
@@ -210,7 +226,8 @@ export const COLS = 7;
 export const BLOCK_SIZE = 70; // 7x7盤面に合わせてブロックサイズを調整 (7x70 = 490px)
 export const BOARD_WIDTH = COLS * BLOCK_SIZE;
 export const BOARD_HEIGHT = ROWS * BLOCK_SIZE;
-export const MAX_AP = 5;
+export const MAX_AP = 10;
+export const AP_PER_DAY = 0; // AP is earned through summon combos only
 
 export interface Relic {
     id: string;
@@ -221,5 +238,7 @@ export interface Relic {
 }
 
 export const RELICS: Relic[] = [
-    { id: 'void_contract', name: '虚空の契約', description: '儀式の盤面が 8x8 に拡大される。', price: 200, icon: '📜' },
+    { id: 'giant_heart', name: '巨人の心臓', description: '全魔物のHPが2倍になる。ただし移動速度が30%低下する。', price: 150, icon: '❤️' },
+    { id: 'fire_crown', name: '炎の王冠', description: '赤系ユニットの攻撃力が1.5倍になる。それ以外は0.8倍になる。', price: 150, icon: '👑' },
+    { id: 'mana_prism', name: 'マナの水晶', description: '自拠点の最大HPが半分になる代わりに、強力な魔法効果を得る。', price: 100, icon: '💎' },
 ];

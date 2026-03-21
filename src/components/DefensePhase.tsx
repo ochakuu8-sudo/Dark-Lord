@@ -1,17 +1,33 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
+import gsap from 'gsap';
+import { PixiPlugin } from 'gsap/PixiPlugin';
 import { useGame } from '../contexts/GameContext';
 import type { EntityState } from '../game/entities';
-import { UNIT_STATS } from '../game/entities';
+import { UNIT_STATS, HERO_ROSTER } from '../game/entities';
+import type { HeroType } from '../game/entities';
+import { ROWS, BLOCK_SIZE as CFG_BLOCK_SIZE, BOARD_WIDTH, ALL_RECIPES } from '../game/config';
 
+const MATERIAL_PREFIX: Record<string, string> = { bone: '骨', meat: '肉', spirit: '霊' };
+const getUnitDisplayName = (type: string): string => {
+    const parts = type.split('_');
+    const suffix = parts[parts.length - 1];
+    const baseId = parts.slice(0, -1).join('_');
+    const baseName = ALL_RECIPES.find(r => r.id === baseId)?.name;
+    const prefix = MATERIAL_PREFIX[suffix];
+    if (baseName && prefix) return prefix + baseName;
+    if (baseName) return baseName;
+    return type;
+};
 
-const FIELD_WIDTH = 1200;
-const FIELD_HEIGHT = 650; 
-const DEMON_BASE = { x: 120, y: FIELD_HEIGHT / 2 };
-const BASE_MAX_HP = 2500;
-const MAX_WAVES = 1; // Wave制を廃止し、一度に全出現させる
+gsap.registerPlugin(PixiPlugin);
+PixiPlugin.registerPIXI(PIXI);
 
-// Projectile visual type based on attacker role
+const BLOCK_SIZE = CFG_BLOCK_SIZE;
+const FIELD_HEIGHT = ROWS * BLOCK_SIZE;
+const DEMON_BASE = { x: 40, y: FIELD_HEIGHT / 2 }; // 左端境界（城なし）
+const MAX_WAVES = 1;
+
 type ProjectileStyle = 'arrow' | 'orb' | 'bomb' | 'sword_flash';
 
 interface Projectile {
@@ -19,7 +35,6 @@ interface Projectile {
     x: number;
     y: number;
     targetId: string | 'base' | 'hero_base';
-    // Snapshot of last known target position (fallback if target dies)
     targetX: number;
     targetY: number;
     speed: number;
@@ -27,11 +42,8 @@ interface Projectile {
     color: number;
     style: ProjectileStyle;
     size: number;
-    // For arrow: direction angle
     angle: number;
-    // Trail positions
     trail: { x: number; y: number }[];
-    // --- Special ---
     isPiercing?: boolean;
     hitIds?: Set<string>;
     maxDistance?: number;
@@ -53,16 +65,6 @@ interface FloatingText {
     color: number;
 }
 
-// 英雄軍側のリスト（図鑑やスポーンで使用）
-const HERO_ROSTER_KEYS = ['村人', '農夫', '弓兵', '剣士', 'シーフ', '魔法使い', '重騎士', 'プリースト', '聖騎士', 'パラディン', '大魔道士', '勇者'] as const;
-type HeroType = typeof HERO_ROSTER_KEYS[number];
-
-const HERO_ROSTER: Record<HeroType, any> = HERO_ROSTER_KEYS.reduce((acc, key) => {
-    acc[key] = UNIT_STATS[key];
-    return acc;
-}, {} as any);
-
-// Determine projectile style from attacker type name
 function getProjectileStyle(type: string): ProjectileStyle {
     if (type.includes('ボマー') || type.includes('爆弾') || type.includes('特攻') || type.includes('デモリ') || type.includes('アルマゲ')) return 'bomb';
     if (type.includes('スライム') || type.includes('インプ') || type.includes('シャーマン') || type.includes('霊魂') || type.includes('精霊') || type.includes('魔') || type.includes('大魔')) return 'orb';
@@ -81,14 +83,23 @@ function getProjectileColor(type: string, unitColor: number): number {
 
 interface DefensePhaseProps {
     registerSpawn?: (fn: (type: string) => void) => void;
-    onStateChange?: (state: any) => void;
+    onStateChange?: (state: {
+        wave: number;
+        demonCount: number;
+        heroCount: number;
+        nextWaveIn: number;
+        killCount: number;
+    }) => void;
 }
 
 const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChange }) => {
-    const { summonedMonsters, setPhase, addGold, incrementDay, currentDay, ownedRelics, addPendingPuzzlePiece } = useGame();
+    const {
+        summonedMonsters,
+        addGold, currentDay, incrementDay, setPhase, phase,
+        incomingEnemies, ownedRelics, addPendingPuzzlePiece,
+        expectedSummons, fieldWidth
+    } = useGame();
     const spawnUnitFnRef = useRef<((type: string) => void) | null>(null);
-
-    const actualMaxBaseHp = ownedRelics.includes('mana_prism') ? Math.floor(BASE_MAX_HP / 2) : BASE_MAX_HP;
 
     const pixiContainerRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<PIXI.Application | null>(null);
@@ -96,12 +107,16 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     const particlesLayerRef = useRef<PIXI.Container | null>(null);
     const projectilesLayerRef = useRef<PIXI.Container | null>(null);
     const floatLayerRef = useRef<PIXI.Container | null>(null);
+    const ghostLayerRef = useRef<PIXI.Container | null>(null);
     const baseGraphicsRef = useRef<PIXI.Graphics | null>(null);
-    // ── Object pools for performance ──
     const entityGfxPool = useRef<Map<string, PIXI.Graphics>>(new Map());
-    const projGfxPool = useRef<Map<string, PIXI.Graphics>>(new Map());
+    const ghostGfxPool = useRef<Map<string, PIXI.Graphics>>(new Map());
     const floatTextPool = useRef<Map<string, PIXI.Text>>(new Map());
     const particleBatchRef = useRef<PIXI.Graphics | null>(null);
+    const projContainerRef = useRef<PIXI.Container | null>(null);
+    const projTexturesRef = useRef<Map<string, PIXI.Texture>>(new Map());
+    const projSpritePool = useRef<Map<string, PIXI.Sprite>>(new Map());
+    const areaBatchRef = useRef<PIXI.Graphics | null>(null);
 
     const stateRef = useRef({
         entities: [] as EntityState[],
@@ -109,106 +124,63 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         projectiles: [] as Projectile[],
         particles: [] as { id: string, x: number, y: number, vx: number, vy: number, color: number, life: number }[],
         floatingTexts: [] as FloatingText[],
-        baseHp: actualMaxBaseHp,
-        maxBaseHp: actualMaxBaseHp,
         wave: 0,
         frameCount: 0,
         nextWaveCountdown: 0,
         waveInProgress: false,
-        castleCooldown: 0,
         eliteIds: new Set<string>(),
         pendingGold: 0,
         killCount: 0,
         phaseEnded: false,
+        currentPhase: phase,
+        currentIncomingEnemies: incomingEnemies
     });
+
+    useEffect(() => { stateRef.current.currentPhase = phase; }, [phase]);
+    useEffect(() => { stateRef.current.currentIncomingEnemies = incomingEnemies; }, [incomingEnemies]);
 
     const [uiState, setUiState] = useState({
-        baseHp: actualMaxBaseHp,
-        maxBaseHp: actualMaxBaseHp,
         wave: 0,
-        demonCount: 0,
-        heroCount: 0,
-        nextWaveIn: 0,
-        killCount: 0,
+        demonCount: 0, heroCount: 0, nextWaveIn: 0, killCount: 0,
     });
 
-    // 定期的に親へUI用ステートを通知
-    useEffect(() => {
-        if (onStateChange) {
-            onStateChange(uiState);
-        }
-    }, [uiState, onStateChange]);
-
+    useEffect(() => { if (onStateChange) onStateChange(uiState); }, [uiState, onStateChange]);
     const [hoveredEntity, setHoveredEntity] = useState<EntityState | null>(null);
     const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-
-
-
     const generateId = () => Math.random().toString(36).substr(2, 9);
 
-    // ── Initial demon spawn (role-based formation) ──
     useEffect(() => {
         const initialEntities: EntityState[] = [];
-
-        const withStats = summonedMonsters.map(unit => {
-            const stats = UNIT_STATS[unit.type] || UNIT_STATS['orc_bone'] || Object.values(UNIT_STATS)[0];
-            return { unit, stats };
-        });
-
-        // Group entities exactly by their attack range
-        const groupsByRange = new Map<number, typeof withStats>();
-        withStats.forEach(item => {
-            const r = item.stats.range!;
-            if (!groupsByRange.has(r)) groupsByRange.set(r, []);
-            groupsByRange.get(r)!.push(item);
-        });
-
-        // Unique sorted ranges (ascending: melee first, ranged last)
-        const sortedRanges = Array.from(groupsByRange.keys()).sort((a, b) => a - b);
-
-        const BASE_X = FIELD_WIDTH * 0.35; // Frontline X position
-        const X_SCALE = 0.8; // Distance moved back per 1 unit of range difference
-        const UNIT_SPACING = 40;
-
         const hasGiantHeart = ownedRelics.includes('giant_heart');
         const hasFireCrown = ownedRelics.includes('fire_crown');
 
-        sortedRanges.forEach((range) => {
-            const group = groupsByRange.get(range)!;
-            // X position naturally decreases as range increases (spawn further left)
-            const groupX = BASE_X - Math.max(0, range - 40) * X_SCALE;
+        summonedMonsters.forEach(unit => {
+            const stats = UNIT_STATS[unit.type] || UNIT_STATS['orc_bone'] || Object.values(UNIT_STATS)[0];
 
-            // Stack vertically, centered on FIELD_HEIGHT / 2
-            const totalH = (group.length - 1) * UNIT_SPACING;
-            const startY = FIELD_HEIGHT / 2 - totalH / 2;
+            let hpMult = hasGiantHeart ? 2.0 : 1.0;
+            let atkMult = hasFireCrown ? (stats.color === 0xff3333 ? 1.5 : 0.8) : 1.0;
 
-            group.forEach(({ unit, stats }, idx) => {
-                let hpMult = hasGiantHeart ? 2.0 : 1.0;
-                let spdMult = hasGiantHeart ? 0.7 : 1.0;
-                let atkMult = hasFireCrown ? (stats.color === 0xff3333 ? 1.5 : 0.8) : 1.0;
+            const finalAttack = Math.floor(stats.attack! * atkMult) + (unit.attackBonus || 0);
 
-                const baseAttack = Math.floor(stats.attack! * atkMult);
-                const finalAttack = baseAttack + (unit.attackBonus || 0);
+            const groupX = unit.c * BLOCK_SIZE + BLOCK_SIZE / 2;
+            const groupY = unit.r * BLOCK_SIZE + BLOCK_SIZE / 2;
 
-                initialEntities.push({
-                    id: unit.id, type: unit.type, faction: 'DEMON',
-                    x: groupX,
-                    y: startY + idx * UNIT_SPACING,
-                    hp: Math.floor(stats.maxHp! * hpMult), maxHp: Math.floor(stats.maxHp! * hpMult),
-                    attack: finalAttack, range: stats.range!,
-                    speed: stats.speed! * spdMult,
-                    cooldown: Math.random() * (stats.maxCooldown! / 2),
-                    maxCooldown: stats.maxCooldown!, color: stats.color!,
-                    passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined
-                });
+            initialEntities.push({
+                id: unit.id, type: unit.type, faction: 'DEMON',
+                x: groupX, y: groupY,
+                hp: Math.floor(stats.maxHp! * hpMult), maxHp: Math.floor(stats.maxHp! * hpMult),
+                attack: finalAttack, range: stats.range!,
+                speed: 0,
+                cooldown: Math.random() * (stats.maxCooldown! / 2),
+                maxCooldown: stats.maxCooldown!, color: stats.color!,
+                passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined
             });
         });
 
         stateRef.current.entities = initialEntities;
-        stateRef.current.nextWaveCountdown = 30; // 0.5秒猶予（即時開始）
-    }, [summonedMonsters]);
+        stateRef.current.nextWaveCountdown = 30;
+    }, [summonedMonsters, ownedRelics]);
 
-    // ── Register external spawn callback ──
     useEffect(() => {
         const spawnFn = (type: string) => {
             const stats = UNIT_STATS[type] || UNIT_STATS['orc_bone'] || Object.values(UNIT_STATS)[0];
@@ -217,7 +189,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             const hpMult = hasGiantHeart ? 2.0 : 1.0;
             const spdMult = hasGiantHeart ? 0.7 : 1.0;
             const atkMult = hasFireCrown ? ((stats.color || 0xffffff) === 0xff3333 ? 1.5 : 0.8) : 1.0;
-            const id = Math.random().toString(36).substr(2, 9);
+            const id = generateId();
             const newEnt: EntityState = {
                 id, type, faction: 'DEMON',
                 x: DEMON_BASE.x + 60 + Math.random() * 60,
@@ -235,187 +207,158 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     }, [registerSpawn, ownedRelics]);
 
 
-    // ── Initialize Pixi ──────────────────
     useEffect(() => {
         if (!pixiContainerRef.current) return;
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        // モバイル等のテクスチャサイズ制限（通常4096pxや8192px）を考慮し、
+        // 物理ピクセルサイズが巨大になりすぎる場合は解像度を下げてクラッシュを防ぐ
+        const safeResolution = (fieldWidth * devicePixelRatio > 4096) ? Math.max(1, 4096 / fieldWidth) : devicePixelRatio;
 
         const app = new PIXI.Application({
-            width: FIELD_WIDTH, height: FIELD_HEIGHT,
-            backgroundColor: 0x111a11,
-            resolution: window.devicePixelRatio || 1,
-            autoDensity: true, antialias: true
+            width: fieldWidth, height: FIELD_HEIGHT, backgroundColor: 0x111a11,
+            resolution: safeResolution, autoDensity: true, antialias: true
         });
-
         pixiContainerRef.current.appendChild(app.view as unknown as Node);
         appRef.current = app;
 
-        const baseGraphics = new PIXI.Graphics();
-        app.stage.addChild(baseGraphics);
-        baseGraphicsRef.current = baseGraphics;
+        const baseGraphics = new PIXI.Graphics(); app.stage.addChild(baseGraphics); baseGraphicsRef.current = baseGraphics;
+        const entitiesLayer = new PIXI.Container(); app.stage.addChild(entitiesLayer); entitiesLayerRef.current = entitiesLayer;
+        const projectilesLayer = new PIXI.Container(); app.stage.addChild(projectilesLayer); projectilesLayerRef.current = projectilesLayer;
 
-        const entitiesLayer = new PIXI.Container();
-        app.stage.addChild(entitiesLayer);
-        entitiesLayerRef.current = entitiesLayer;
+        // ── Projectile textures (generated once, reused as sprites) ──
+        const textures = new Map<string, PIXI.Texture>();
 
-        const projectilesLayer = new PIXI.Container();
-        app.stage.addChild(projectilesLayer);
-        projectilesLayerRef.current = projectilesLayer;
+        const arrowG = new PIXI.Graphics();
+        arrowG.lineStyle(2, 0xffffff, 1); arrowG.moveTo(0, 8); arrowG.lineTo(44, 8); arrowG.lineStyle(0);
+        arrowG.beginFill(0xffffff); arrowG.drawPolygon([60, 8, 44, 2, 44, 14]); arrowG.endFill();
+        textures.set('arrow', app.renderer.generateTexture(arrowG, { scaleMode: PIXI.SCALE_MODES.LINEAR, resolution: 1, region: new PIXI.Rectangle(0, 0, 60, 16) }));
+        arrowG.destroy();
 
-        const particlesLayer = new PIXI.Container();
-        app.stage.addChild(particlesLayer);
-        particlesLayerRef.current = particlesLayer;
+        const orbG = new PIXI.Graphics();
+        orbG.beginFill(0xffffff, 0.25); orbG.drawCircle(16, 16, 16); orbG.endFill();
+        orbG.beginFill(0xffffff, 0.9); orbG.drawCircle(16, 16, 8); orbG.endFill();
+        orbG.beginFill(0xffffff, 1.0); orbG.drawCircle(16, 16, 4); orbG.endFill();
+        textures.set('orb', app.renderer.generateTexture(orbG, { scaleMode: PIXI.SCALE_MODES.LINEAR, resolution: 1, region: new PIXI.Rectangle(0, 0, 32, 32) }));
+        orbG.destroy();
 
-        const floatLayer = new PIXI.Container();
-        app.stage.addChild(floatLayer);
-        floatLayerRef.current = floatLayer;
+        const bombG = new PIXI.Graphics();
+        bombG.beginFill(0xff6600, 0.4); bombG.drawCircle(20, 20, 20); bombG.endFill();
+        bombG.beginFill(0xff2200, 0.9); bombG.drawCircle(20, 20, 10); bombG.endFill();
+        bombG.lineStyle(1.5, 0xffff00, 0.8);
+        bombG.moveTo(20, 10); bombG.lineTo(20, 30); bombG.moveTo(10, 20); bombG.lineTo(30, 20); bombG.lineStyle(0);
+        textures.set('bomb', app.renderer.generateTexture(bombG, { scaleMode: PIXI.SCALE_MODES.LINEAR, resolution: 1, region: new PIXI.Rectangle(0, 0, 40, 40) }));
+        bombG.destroy();
 
-        // Static background grid (draw once)
+        projTexturesRef.current = textures;
+        const projContainer = new PIXI.Container(); projectilesLayer.addChild(projContainer); projContainerRef.current = projContainer;
+        const areaBatch = new PIXI.Graphics(); projectilesLayer.addChild(areaBatch); areaBatchRef.current = areaBatch;
+        const particlesLayer = new PIXI.Container(); app.stage.addChild(particlesLayer); particlesLayerRef.current = particlesLayer;
+        const floatLayer = new PIXI.Container(); app.stage.addChild(floatLayer); floatLayerRef.current = floatLayer;
+        const ghostLayer = new PIXI.Container(); ghostLayer.alpha = 0.5; app.stage.addChild(ghostLayer); ghostLayerRef.current = ghostLayer;
+
+        // Static background grid (Integrated with Puzzle) 
         const staticBgGr = new PIXI.Graphics();
-        staticBgGr.lineStyle(1, 0x223322, 0.3);
-        for (let x = 100; x < FIELD_WIDTH; x += 100) { staticBgGr.moveTo(x, 0); staticBgGr.lineTo(x, FIELD_HEIGHT); }
+        const gridWidth = BOARD_WIDTH; // Use the exported constant
+
+        // 1. Grid Area
+        staticBgGr.lineStyle(1, 0x223322, 0.4);
+        for (let x = 0; x <= gridWidth; x += BLOCK_SIZE) {
+            staticBgGr.moveTo(x, 0); staticBgGr.lineTo(x, FIELD_HEIGHT);
+        }
+        for (let y = 0; y <= FIELD_HEIGHT; y += BLOCK_SIZE) {
+            staticBgGr.moveTo(0, y); staticBgGr.lineTo(fieldWidth, y);
+        }
+
+        // 2. Castle Wall (Visual Boundary at BOARD_WIDTH)
+        staticBgGr.lineStyle(4, 0x444455, 0.8);
+        staticBgGr.moveTo(gridWidth, 0);
+        staticBgGr.lineTo(gridWidth, FIELD_HEIGHT);
+
+        for (let y = 20; y < FIELD_HEIGHT; y += 40) {
+            staticBgGr.lineStyle(2, 0x333344, 0.6);
+            staticBgGr.drawRect(gridWidth - 5, y, 10, 20);
+        }
+
+        // 3. Battlefield Area (Right side, 1000 to 1400px)
+        staticBgGr.lineStyle(1, 0x1a1a1a, 0.3);
+        const startX = gridWidth + BLOCK_SIZE;
+        for (let x = startX; x < fieldWidth; x += BLOCK_SIZE) {
+            staticBgGr.moveTo(x, 0); staticBgGr.lineTo(x, FIELD_HEIGHT);
+        }
         staticBgGr.lineStyle(0);
         baseGraphics.addChild(staticBgGr);
 
-        // Single shared Graphics for all particles (batch draw)
-        const pBatch = new PIXI.Graphics();
-        particlesLayerRef.current!.addChild(pBatch);
-        particleBatchRef.current = pBatch;
-
         app.stage.eventMode = 'static';
-        app.stage.hitArea = new PIXI.Rectangle(0, 0, FIELD_WIDTH, FIELD_HEIGHT);
-
-
+        app.stage.hitArea = new PIXI.Rectangle(0, 0, fieldWidth, FIELD_HEIGHT);
         app.ticker.add((delta) => { updateLogic(delta); renderGraphics(); });
 
         return () => {
-            entityGfxPool.current.clear();
-            projGfxPool.current.clear();
-            floatTextPool.current.clear();
-            particlesLayerRef.current = null;
-            floatLayerRef.current = null;
-            app.destroy(true, { children: true });
-            appRef.current = null;
+            entityGfxPool.current.clear(); floatTextPool.current.clear();
+            projSpritePool.current.forEach(s => s.destroy());
+            projSpritePool.current.clear();
+            projTexturesRef.current.forEach(t => t.destroy());
+            projTexturesRef.current.clear();
+            app.destroy(true, { children: true }); appRef.current = null;
         };
-    }, []);
-
-    // ── Wave composition ──────────────────
-    // ── Wave composition (Day-based patterns) ──────────────────
-    const buildWave = useCallback((): { type: HeroType, count: number }[] => {
-        const day = currentDay;
-        const comp: { type: HeroType, count: number }[] = [];
-        
-        // Base difficulty scaling
-        const totalCount = 10 + day * 5;
-        
-        // Pattern logic: Rotate or pick patterns based on day
-        const patternType = day % 4; 
-        
-        if (day === 1) {
-            comp.push({ type: '村人', count: 12 });
-            comp.push({ type: '農夫', count: 3 });
-        } else if (day === 2) {
-            comp.push({ type: '農夫', count: 10 });
-            comp.push({ type: '弓兵', count: 6 });
-            comp.push({ type: '剣士', count: 4 });
-        } else if (patternType === 0) {
-            // Melee Rush
-            comp.push({ type: '剣士', count: Math.floor(totalCount * 0.6) });
-            comp.push({ type: '重騎士', count: Math.floor(totalCount * 0.2) });
-            comp.push({ type: 'プリースト', count: Math.floor(totalCount * 0.1) + 1 });
-        } else if (patternType === 1) {
-            // Ranged focused
-            comp.push({ type: '弓兵', count: Math.floor(totalCount * 0.5) });
-            comp.push({ type: '魔法使い', count: Math.floor(totalCount * 0.2) });
-            comp.push({ type: '重騎士', count: Math.floor(totalCount * 0.2) });
-        } else if (patternType === 2) {
-            // Stealth/Ambush style
-            comp.push({ type: 'シーフ', count: Math.floor(totalCount * 0.6) });
-            comp.push({ type: '剣士', count: Math.floor(totalCount * 0.3) });
-            comp.push({ type: '魔法使い', count: 2 });
-        } else {
-            // Balanced/Elite
-            comp.push({ type: '聖騎士', count: Math.floor(day * 0.8) });
-            comp.push({ type: 'パラディン', count: Math.floor(day * 0.4) });
-            comp.push({ type: '弓兵', count: Math.floor(totalCount * 0.4) });
-            comp.push({ type: 'プリースト', count: 3 });
-        }
-
-        // Add some basic units to fill up
-        const currentTotal = comp.reduce((sum, c) => sum + c.count, 0);
-        if (currentTotal < totalCount) {
-            comp.push({ type: '村人', count: totalCount - currentTotal });
-        }
-
-        return comp;
-    }, [currentDay]);
+    }, [fieldWidth]); // Add fieldWidth dependency to re-init app if it changes
 
     const spawnWave = useCallback(() => {
         const s = stateRef.current;
-        if (s.wave >= MAX_WAVES) return;
+        console.log("DEBUG: spawnWave called, current incomingEnemies:", s.currentIncomingEnemies.length);
+        if (s.wave >= 1) return;
         s.wave++;
         s.waveInProgress = true;
-        
-        const composition = buildWave();
-        const dayHpMult = 1.0 + (currentDay - 1) * 0.4;
-        
-        composition.forEach(({ type, count }) => {
-            const stats = HERO_ROSTER[type];
-            for (let i = 0; i < count; i++) {
-                const isElite = Math.random() < 0.12;
-                const id = generateId();
-                if (isElite) s.eliteIds.add(id);
 
-                const finalHp = Math.floor(stats.maxHp * (isElite ? 2 : 1) * dayHpMult);
-                const entity: EntityState = {
-                    id, type, faction: 'HERO',
-                    x: FIELD_WIDTH - 40 - Math.random() * 200,
-                    y: 50 + Math.random() * (FIELD_HEIGHT - 100),
-                    hp: finalHp, maxHp: finalHp,
-                    attack: stats.attack * (isElite ? 1.8 : 1),
-                    range: stats.range,
-                    speed: stats.speed * (isElite ? 1.15 : 1),
-                    cooldown: Math.random() * 40,
-                    maxCooldown: stats.maxCooldown,
-                    color: isElite ? 0xffd700 : stats.color,
-                };
-                
-                // 3秒おき（0, 3, 6, 9秒）のバッチに振り分け
-                const batchIndex = Math.floor(Math.random() * 4); // 0, 1, 2, 3
-                const delay = batchIndex * 180; // 0, 180, 360, 540 フレーム
-                s.pendingHeroes.push({ entity, spawnAtFrames: s.frameCount + delay });
-            }
+        const dayHpMult = 1.0 + (currentDay - 1) * 0.4;
+
+        s.currentIncomingEnemies.forEach(en => {
+            const stats = UNIT_STATS[en.type] || UNIT_STATS['村人'];
+            const isElite = en.isElite;
+            const id = en.id;
+            if (isElite) s.eliteIds.add(id);
+
+            const finalHp = Math.floor(stats.maxHp! * (isElite ? 2 : 1) * dayHpMult);
+            const entity: EntityState = {
+                id, type: en.type, faction: 'HERO',
+                x: BOARD_WIDTH + 250 + en.offset, y: en.lane * BLOCK_SIZE + BLOCK_SIZE / 2,
+                hp: finalHp, maxHp: finalHp,
+                attack: stats.attack! * (isElite ? 1.8 : 1), range: stats.range!,
+                speed: stats.speed! * (isElite ? 1.15 : 1),
+                cooldown: Math.random() * 40, maxCooldown: stats.maxCooldown!,
+                color: isElite ? 0xffd700 : stats.color!,
+            };
+
+            s.entities.push(entity);
         });
 
-        // 5回目（12秒）にボスを出現させる
         const bossType: HeroType = currentDay >= 5 ? '勇者' : (currentDay >= 3 ? 'パラディン' : '重騎士');
-        const bossStats = HERO_ROSTER[bossType];
+        const bossStats = UNIT_STATS[bossType] || UNIT_STATS['剣士'];
         const bossId = 'boss-' + generateId();
         s.eliteIds.add(bossId);
-        
-        const bossHp = Math.floor(bossStats.maxHp * 5 * dayHpMult); 
+
+        const bossHp = Math.floor(bossStats.maxHp! * 5 * dayHpMult);
         const bossEntity: EntityState = {
             id: bossId, type: 'BOSS ' + bossType, faction: 'HERO',
-            x: FIELD_WIDTH - 60,
-            y: FIELD_HEIGHT / 2,
+            x: fieldWidth - 100, y: FIELD_HEIGHT / 2,
             hp: bossHp, maxHp: bossHp,
-            attack: bossStats.attack * 2.5,
-            range: bossStats.range + 50,
-            speed: bossStats.speed * 0.8,
+            attack: bossStats.attack! * 2.5,
+            range: bossStats.range! + 50,
+            speed: bossStats.speed! * 0.8,
             cooldown: 0,
-            maxCooldown: bossStats.maxCooldown,
-            color: 0xff0000, 
+            maxCooldown: bossStats.maxCooldown!,
+            color: 0xff0000,
         };
         // ボスはきっかり12秒後 (720フレーム)
         s.pendingHeroes.push({ entity: bossEntity, spawnAtFrames: s.frameCount + 720 });
 
         setUiState(prev => ({ ...prev, wave: s.wave }));
-    }, [buildWave, currentDay]);
+    }, [currentDay, incomingEnemies]);
 
     // ── Spawn a projectile ────────────────
-    const spawnProjectile = (attacker: EntityState, target: EntityState | 'base' | 'hero_base') => {
+    const spawnProjectile = (attacker: EntityState, target: EntityState | 'base' | 'hero_base' | 'forward') => {
         const s = stateRef.current;
-        const tx = (typeof target === 'string') ? DEMON_BASE.x : target.x;
-        const ty = (typeof target === 'string') ? DEMON_BASE.y : target.y;
+        const tx = (target === 'forward') ? (attacker.x + 2000) : ((typeof target === 'string') ? DEMON_BASE.x : target.x);
+        const ty = (target === 'forward') ? attacker.y : ((typeof target === 'string') ? DEMON_BASE.y : target.y);
         const dx = tx - attacker.x;
         const dy = ty - attacker.y;
         const angle = Math.atan2(dy, dx);
@@ -476,6 +419,9 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     // ── Main logic ────────────────────────
     const updateLogic = (delta: number) => {
         const s = stateRef.current;
+        s.frameCount++;
+
+        if (s.currentPhase !== 'BATTLE') return;
 
         // ── Sequential Spawning ──────────────
         if (s.pendingHeroes.length > 0) {
@@ -493,43 +439,13 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         // Wave countdown
         if (s.wave < MAX_WAVES && s.nextWaveCountdown > 0) {
             s.nextWaveCountdown -= delta;
-            if (s.nextWaveCountdown <= 0) { spawnWave(); s.nextWaveCountdown = 0; }
+            if (s.nextWaveCountdown <= 0) {
+                console.log("DEBUG: nextWaveCountdown hit 0, spawning wave");
+                spawnWave();
+                s.nextWaveCountdown = 0;
+            }
         }
 
-        // ── Castle auto-attack ──────────────
-        const CASTLE_RANGE = 250;
-        const CASTLE_DAMAGE = 75;
-        const CASTLE_COOLDOWN = 90; // ~1.5s at 60fps
-        if (s.castleCooldown > 0) s.castleCooldown -= delta;
-        if (s.castleCooldown <= 0) {
-            let castleTarget: EntityState | null = null;
-            let castleMinDist = CASTLE_RANGE;
-            for (const ent of s.entities) {
-                if (ent.faction === 'HERO' && ent.hp > 0) {
-                    const d = Math.hypot(DEMON_BASE.x - ent.x, DEMON_BASE.y - ent.y);
-                    if (d < castleMinDist) { castleMinDist = d; castleTarget = ent; }
-                }
-            }
-            if (castleTarget) {
-                // Fire a dark orb from the castle
-                const tx = castleTarget.x, ty = castleTarget.y;
-                const angle = Math.atan2(ty - DEMON_BASE.y, tx - DEMON_BASE.x);
-                s.projectiles.push({
-                    id: generateId(),
-                    x: DEMON_BASE.x, y: DEMON_BASE.y,
-                    targetId: castleTarget.id,
-                    targetX: tx, targetY: ty,
-                    speed: 5,
-                    damage: CASTLE_DAMAGE,
-                    color: 0xcc00ff,
-                    style: 'orb',
-                    size: 7,
-                    angle,
-                    trail: [],
-                });
-                s.castleCooldown = CASTLE_COOLDOWN;
-            }
-        }
 
         const entities = s.entities;
         const aliveEntities: EntityState[] = [];
@@ -695,13 +611,8 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             let minDist = Infinity;
 
             if (ent.faction === 'HERO') {
-                const distToBase = Math.hypot(DEMON_BASE.x - ent.x, DEMON_BASE.y - ent.y);
-                minDist = distToBase; // Default target is base
-
                 if (ent.type === 'プリースト') {
                     // Priest targets wounded allies to heal
-                    target = null;
-                    minDist = Infinity;
                     let lowestHpRatio = 1.0;
                     for (let j = 0; j < entities.length; j++) {
                         const other = entities[j];
@@ -718,7 +629,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         }
                     }
                 } else if (ent.type !== 'シーフ') {
-                    // Everyone except Thief looks for Demons
+                    // 最近の魔物（レーン無制限）
                     for (let j = 0; j < entities.length; j++) {
                         const other = entities[j];
                         if (other.faction === 'DEMON' && other.hp > 0) {
@@ -729,16 +640,18 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 }
             } else {
                 const isHealer = ent.passiveAbilities?.some(pa => pa.type === 'HEAL_SHOT');
-                if (isHealer) {
+                const isSkeleton = ent.type.includes('skeleton');
+
+                if (isSkeleton) {
+                    // スケルトン: ターゲット選択しない（常時前方発射で処理）
+                } else if (isHealer) {
                     // Support Logic: Target lowest HP ally
-                    target = null;
-                    minDist = Infinity;
                     let lowestHpRatio = 1.0;
                     for (let j = 0; j < entities.length; j++) {
                         const other = entities[j];
                         if (other.faction === 'DEMON' && other.hp > 0 && other.hp < other.maxHp) {
                             const d = Math.hypot(other.x - ent.x, other.y - ent.y);
-                            if (d <= ent.range + 50) { // Slight buffer for healers
+                            if (d <= ent.range + 50) {
                                 const hpRatio = other.hp / other.maxHp;
                                 if (hpRatio < lowestHpRatio) {
                                     lowestHpRatio = hpRatio;
@@ -749,8 +662,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         }
                     }
                 } else {
-                    // Update: Remove base distance bias so demons can chase heroes far away
-                    minDist = Infinity;
+                    // その他魔物: 射程内の最近敵をオートエイム
                     for (let j = 0; j < entities.length; j++) {
                         const other = entities[j];
                         if (other.faction === 'HERO' && other.hp > 0) {
@@ -763,76 +675,64 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
             if (ent.cooldown > 0) ent.cooldown -= delta;
 
+            // スケルトン: クールダウンごとに前方向へ射程無限発射
+            if (ent.faction === 'DEMON' && ent.type.includes('skeleton') && ent.cooldown <= 0) {
+                ent.cooldown = ent.maxCooldown;
+                spawnProjectile(ent, 'forward');
+            }
+
+            const isWizardUnit = ent.type.includes('wizard');
+
             if (target) {
                 if (minDist <= ent.range) {
                     if (ent.cooldown <= 0) {
                         ent.cooldown = ent.maxCooldown;
                         const style = getProjectileStyle(ent.type);
                         if (style === 'sword_flash' || ent.range <= 60) {
-                            // Melee: instant damage + small flash particle
                             applyDamage(target, ent.attack, ent);
                             for (let k = 0; k < 3; k++) {
                                 const a = Math.random() * Math.PI * 2;
                                 s.particles.push({ id: generateId(), x: target.x, y: target.y, vx: Math.cos(a) * 1.5, vy: Math.sin(a) * 1.5, color: 0xffffff, life: 10 });
                             }
                         } else {
-                            // Ranged: fire projectile
                             spawnProjectile(ent, target);
                         }
                     }
-                    // Removed retreat behavior; units will no longer run away when engaged
-                } else {
-                    // Chase toward target at full speed
+                } else if (ent.faction === 'HERO') {
+                    // 勇者: ターゲット方向へ移動
+                    let speedMult = 1.0;
+                    for (const ally of entities) {
+                        if (ally.faction === 'DEMON' && ally.hp > 0 && ally.type.includes('スライム')) {
+                            if (Math.hypot(ally.x - ent.x, ally.y - ent.y) < 90) { speedMult = 0.4; break; }
+                        }
+                    }
                     const a = Math.atan2(target.y - ent.y, target.x - ent.x);
-                    ent.x += Math.cos(a) * ent.speed * delta;
-                    ent.y += Math.sin(a) * ent.speed * delta;
+                    ent.x += Math.cos(a) * ent.speed * speedMult * delta;
+                    ent.y += Math.sin(a) * ent.speed * speedMult * delta;
                 }
+                // 魔物は固定配置（移動しない）
             } else if (ent.faction === 'HERO') {
-                // Slime slow aura: heroes near a slime move at 40% speed
+                // No target, march toward demon base
                 let speedMult = 1.0;
                 for (const ally of entities) {
                     if (ally.faction === 'DEMON' && ally.hp > 0 && ally.type.includes('スライム')) {
                         if (Math.hypot(ally.x - ent.x, ally.y - ent.y) < 90) { speedMult = 0.4; break; }
                     }
                 }
-                if (minDist <= ent.range + 20) {
-                    if (ent.cooldown <= 0) {
-                        ent.cooldown = ent.maxCooldown;
-                        const style = getProjectileStyle(ent.type);
-                        if (style === 'sword_flash' || ent.range <= 60) {
-                            s.baseHp -= ent.attack;
-                            s.floatingTexts.push({ id: generateId(), x: DEMON_BASE.x + (Math.random() - 0.5) * 30, y: DEMON_BASE.y - 20, text: `- ${ent.attack} `, life: 55, maxLife: 55, color: 0xff2222 });
-                            if (s.baseHp <= 0) setPhase('RESULT');
-                        } else {
-                            spawnProjectile(ent, 'base');
-                        }
-                    }
-                } else {
-                    const a = Math.atan2(DEMON_BASE.y - ent.y, DEMON_BASE.x - ent.x);
-                    ent.x += Math.cos(a) * ent.speed * speedMult * delta;
-                    ent.y += Math.sin(a) * ent.speed * speedMult * delta;
+                const a = Math.atan2(DEMON_BASE.y - ent.y, DEMON_BASE.x - ent.x);
+                ent.x += Math.cos(a) * ent.speed * speedMult * delta;
+                ent.y += Math.sin(a) * ent.speed * speedMult * delta;
+
+                // 城には到達しても攻撃しない（待機）
+                if (ent.x < DEMON_BASE.x) {
+                    ent.x = DEMON_BASE.x; // 城の前で止まる
                 }
             } else { // DEMON without target
-                if (heroCount > 0) {
-                    // Forward movement if heroes exist in field but no specific target discovered
-                    ent.x += ent.speed * delta;
-                } else {
-                    // Alignment logic when no heroes are present
-                    const alignX = 200 + (350 - Math.min(350, ent.range)) * 0.8;
-                    const diffX = alignX - ent.x;
-                    if (Math.abs(diffX) > 2) {
-                        ent.x += (diffX > 0 ? 1 : -1) * ent.speed * delta;
-                    }
-                    // Gently move towards vertical center line
-                    const centerY = FIELD_HEIGHT / 2;
-                    const dy = centerY - ent.y;
-                    if (Math.abs(dy) > 10) {
-                        ent.y += (dy > 0 ? 0.2 : -0.2) * ent.speed * delta;
-                    }
-                }
+                // Do nothing (stationary)
             }
 
-            // Separation (Avoid overlapping)
+
+            // Separation
             const SEPARATION_RADIUS = 36;
             for (let j = 0; j < entities.length; j++) {
                 if (i === j) continue;
@@ -882,14 +782,14 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         const range = pa.range || 120;
                         for (let k = 0; k < 8; k++) {
                             const a = Math.random() * Math.PI * 2;
-                            s.particles.push({ 
-                                id: generateId(), 
-                                x: ent.x + Math.cos(a) * range, 
-                                y: ent.y + Math.sin(a) * range, 
-                                vx: -Math.cos(a) * 0.3, 
-                                vy: -Math.sin(a) * 0.3, 
-                                color: 0xffaa44, 
-                                life: 35 
+                            s.particles.push({
+                                id: generateId(),
+                                x: ent.x + Math.cos(a) * range,
+                                y: ent.y + Math.sin(a) * range,
+                                vx: -Math.cos(a) * 0.3,
+                                vy: -Math.sin(a) * 0.3,
+                                color: 0xffaa44,
+                                life: 35
                             });
                         }
                     }
@@ -913,7 +813,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 });
             }
 
-            ent.x = Math.max(20, Math.min(FIELD_WIDTH - 20, ent.x));
+            ent.x = Math.max(20, Math.min(fieldWidth - 20, ent.x));
             ent.y = Math.max(20, Math.min(FIELD_HEIGHT - 20, ent.y));
             aliveEntities.push(ent);
         }
@@ -926,7 +826,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         const aliveProjectiles: Projectile[] = [];
         for (const proj of s.projectiles) {
             // Update target position if target still alive (EXCEPT for Piercing/Area which are coordinate-based)
-            if (proj.targetId !== 'base' && proj.targetId !== 'hero_base' && !proj.isPiercing && !proj.isArea) {
+            if (proj.targetId !== 'base' && proj.targetId !== 'hero_base' && proj.targetId !== 'forward' && !proj.isPiercing && !proj.isArea) {
                 const liveTarget = entityMap.get(proj.targetId);
                 if (liveTarget) {
                     proj.targetX = liveTarget.x;
@@ -948,12 +848,25 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             proj.angle = Math.atan2(dy, dx);
 
             let hitAnything = false;
-            if (dist < proj.speed * delta + 10) {
+
+            // 'forward' 弾: 毎フレーム近接チェックで最初に触れた敵に命中
+            if (proj.targetId === 'forward') {
+                for (const t of aliveEntities) {
+                    if (t.faction === 'HERO' && t.hp > 0) {
+                        if (Math.hypot(t.x - proj.x, t.y - proj.y) < proj.size + 18) {
+                            const attacker = proj.sourceId ? entityMap.get(proj.sourceId) : undefined;
+                            applyDamage(t, proj.damage, attacker);
+                            hitAnything = true;
+                            break;
+                        }
+                    }
+                }
+                // 画面外に出たら削除
+                if (proj.x > fieldWidth + 50) hitAnything = true;
+            } else if (dist < proj.speed * delta + 10) {
                 // Hit!
                 if (proj.targetId === 'base') {
-                    s.baseHp -= proj.damage;
-                    s.floatingTexts.push({ id: generateId(), x: DEMON_BASE.x, y: DEMON_BASE.y - 20, text: `- ${proj.damage} `, life: 55, maxLife: 55, color: 0xff2222 });
-                    if (s.baseHp <= 0) setPhase('RESULT');
+                    // 城への攻撃は無効（敵の目的は味方の全滅）
                     hitAnything = true;
                 } else if (!proj.isArea) {
                     // Single target (Non-piercing) logic
@@ -1043,8 +956,14 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             s.nextWaveCountdown = 480; // 8秒に延長
         }
 
+        // Lose condition: 味方が全滅 (heroes still active or incoming)
+        if (demonCount === 0 && (heroCount > 0 || s.pendingHeroes.length > 0 || s.wave < MAX_WAVES) && !s.phaseEnded) {
+            s.phaseEnded = true;
+            setTimeout(() => setPhase('RESULT'), 1500);
+        }
+
         // Win condition: No active heroes AND no pending heroes
-        if (s.wave >= MAX_WAVES && heroCount === 0 && s.pendingHeroes.length === 0 && s.baseHp > 0 && !s.phaseEnded) {
+        if (s.wave >= MAX_WAVES && heroCount === 0 && s.pendingHeroes.length === 0 && !s.phaseEnded) {
             s.phaseEnded = true;
             addGold(120 + currentDay * 80);
             // Small delay before transition to show text
@@ -1068,42 +987,172 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             t.life -= delta; t.y -= 0.5 * delta;
             if (t.life > 0) aT.push(t);
         }
+
         s.floatingTexts = aT;
 
-        s.frameCount++;
         if (s.frameCount % 6 === 0) {
             // Flush pending gold
             if (s.pendingGold > 0) { addGold(s.pendingGold); s.pendingGold = 0; }
             setUiState({
-                baseHp: Math.max(0, s.baseHp), maxBaseHp: s.maxBaseHp,
                 wave: s.wave, demonCount, heroCount,
-                nextWaveIn: Math.ceil(s.nextWaveCountdown / 60), killCount: s.killCount,
+                nextWaveIn: Math.ceil(s.nextWaveCountdown / 60),
+                killCount: s.killCount
             });
         }
+    };
+
+    const renderGhostUnits = () => {
+        if (!ghostLayerRef.current) return;
+        const layer = ghostLayerRef.current;
+        const pool = ghostGfxPool.current;
+        const currentIds = new Set<string>();
+
+        expectedSummons.forEach((sum, idx) => {
+            const id = `ghost-${idx}-${sum.type}`;
+            currentIds.add(id);
+            let g = pool.get(id);
+            if (!g) {
+                g = new PIXI.Graphics();
+                pool.set(id, g);
+                layer.addChild(g);
+            }
+            g.clear();
+            const stats = UNIT_STATS[sum.type] || { color: 0xffffff };
+            const color = stats.color || 0xffffff;
+
+            // Draw a simplified ghost circle/rect
+            g.beginFill(color, 0.4);
+            g.lineStyle(2, 0xffffff, 0.6);
+            g.drawCircle(0, 0, 20);
+            g.endFill();
+
+            // Position at the matching material column
+            g.x = sum.c * BLOCK_SIZE + BLOCK_SIZE / 2;
+            g.y = sum.r * BLOCK_SIZE + BLOCK_SIZE / 2;
+
+            // Floating animation
+            g.y += Math.sin(stateRef.current.frameCount * 0.1 + idx) * 5;
+        });
+
+        // Cleanup unused ghost graphics
+        pool.forEach((g, id) => {
+            if (!currentIds.has(id)) {
+                g.destroy();
+                pool.delete(id);
+            }
+        });
+    };
+
+    const renderHeroForecast = () => {
+        if (!ghostLayerRef.current || phase !== 'RITUAL') return;
+        const layer = ghostLayerRef.current;
+        const pool = ghostGfxPool.current;
+        const currentIds = new Set<string>();
+
+        incomingEnemies.forEach((en) => {
+            const id = `forecast-${en.id}`;
+            currentIds.add(id);
+            let g = pool.get(id);
+            if (!g) {
+                g = new PIXI.Graphics();
+                pool.set(id, g);
+                layer.addChild(g);
+
+                // Add a text label as a child
+                const label = new PIXI.Text(en.type, {
+                    fontSize: 14,
+                    fill: 0xffffff,
+                    fontWeight: 'bold',
+                    stroke: 0x000000,
+                    strokeThickness: 3
+                });
+                label.anchor.set(0.5, 0);
+                label.y = 20;
+                g.addChild(label);
+
+                if (en.isElite) {
+                    const eliteLabel = new PIXI.Text("ELITE", {
+                        fontSize: 10,
+                        fill: 0xffd700,
+                        fontWeight: 'bold'
+                    });
+                    eliteLabel.anchor.set(0.5, 1);
+                    eliteLabel.y = -20;
+                    g.addChild(eliteLabel);
+                }
+            }
+            g.clear();
+            const stats = UNIT_STATS[en.type] || { color: 0xcccccc };
+            const color = stats.color || 0xcccccc;
+
+            // Draw a slightly larger diamond for elite
+            const sz = en.isElite ? 22 : 15;
+            g.beginFill(color, 0.7);
+            g.lineStyle(2, en.isElite ? 0xffd700 : 0xffaa00, 0.9);
+            g.drawPolygon([-sz, 0, 0, -sz, sz, 0, 0, sz]);
+            g.endFill();
+
+            // Position: index * 150 + 250 on the right of BOARD_WIDTH
+            g.x = BOARD_WIDTH + 250 + en.offset;
+            g.y = en.lane * BLOCK_SIZE + BLOCK_SIZE / 2;
+        });
+
+        // Combined cleanup logic for forecast items
+        pool.forEach((g, id) => {
+            if (id.startsWith('forecast-') && !currentIds.has(id)) {
+                g.destroy();
+                pool.delete(id);
+            }
+        });
     };
 
     // ── Render ────────────────────────────
     const renderGraphics = () => {
         if (!baseGraphicsRef.current || !entitiesLayerRef.current || !particlesLayerRef.current || !floatLayerRef.current || !projectilesLayerRef.current) return;
 
-        // Demon base only (grid is static, drawn once)
+        if (phase === 'RITUAL') {
+            renderGhostUnits();
+            renderHeroForecast();
+        } else {
+            if (ghostLayerRef.current) ghostLayerRef.current.removeChildren();
+            ghostGfxPool.current.clear();
+        }
+
+        // ── Render Base (Castle) ──
         const bg = baseGraphicsRef.current;
         bg.clear();
 
-        // Demon base
-        const hpRatio = Math.max(0, stateRef.current.baseHp / stateRef.current.maxBaseHp);
-        const baseColor = hpRatio > 0.5 ? 0x44aaff : hpRatio > 0.25 ? 0xffaa00 : 0xff3333;
-        bg.lineStyle(5, baseColor, 0.9); bg.drawCircle(DEMON_BASE.x, DEMON_BASE.y, 70); bg.lineStyle(0);
-        bg.beginFill(0x220000); bg.drawCircle(DEMON_BASE.x, DEMON_BASE.y, 65); bg.endFill();
-        bg.beginFill(0xff2200); bg.drawCircle(DEMON_BASE.x, DEMON_BASE.y, 25); bg.endFill();
-        bg.beginFill(0x111111); bg.drawRoundedRect(DEMON_BASE.x - 75, DEMON_BASE.y + 80, 150, 14, 4);
-        bg.beginFill(baseColor); bg.drawRoundedRect(DEMON_BASE.x - 75, DEMON_BASE.y + 80, 150 * hpRatio, 14, 4); bg.endFill();
+        const gridWidth = BOARD_WIDTH;
 
-        // (Hero base rendering removed)
+        // 1. Grid Area (Puzzle + Battlefield)
+        bg.lineStyle(1, 0x223322, 0.4);
+        // Vertical lines
+        for (let x = 0; x <= fieldWidth; x += BLOCK_SIZE) {
+            const isBorder = (x === gridWidth);
+            if (isBorder) bg.lineStyle(2, 0x444455, 0.8);
+            else bg.lineStyle(1, x > gridWidth ? 0x1a1a1a : 0x223322, 0.4);
+
+            bg.moveTo(x, 0); bg.lineTo(x, FIELD_HEIGHT);
+        }
+        // Horizontal lines (Lanes)
+        bg.lineStyle(1, 0x223322, 0.4);
+        for (let y = 0; y <= FIELD_HEIGHT; y += BLOCK_SIZE) {
+            bg.moveTo(0, y); bg.lineTo(fieldWidth, y);
+        }
+
+        // 2. Left Boundary (魔界の門)
+        bg.lineStyle(4, 0x550055, 0.8);
+        bg.moveTo(gridWidth, 0);
+        bg.lineTo(gridWidth, FIELD_HEIGHT);
+        bg.lineStyle(0);
+        bg.beginFill(0x220022, 0.5);
+        bg.drawRect(0, 0, gridWidth, FIELD_HEIGHT);
+        bg.endFill();
 
         // ── Entities (object pool) ──
         const el = entitiesLayerRef.current;
         const livingIds = new Set(stateRef.current.entities.map(e => e.id));
+
         // Remove dead entities from pool
         entityGfxPool.current.forEach((g, id) => {
             if (!livingIds.has(id)) {
@@ -1112,14 +1161,19 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 entityGfxPool.current.delete(id);
             }
         });
+
         stateRef.current.entities.forEach(ent => {
             const isBoss = ent.id.startsWith('boss-');
             const sz = isBoss ? 30 : (ent.faction === 'HERO' ? 15 : 18);
             const isElite = ent.faction === 'HERO' && stateRef.current.eliteIds.has(ent.id);
             let g = entityGfxPool.current.get(ent.id);
-            if (!g) {
-                // Create once: base shape + outline + HP bar child
+
+            if (!g || g.destroyed) {
                 g = new PIXI.Graphics();
+                el.addChild(g);
+                entityGfxPool.current.set(ent.id, g);
+
+                // Initial persistent elements (drawn once per entity creation)
                 const outC = isElite ? 0xffd700 : ent.faction === 'HERO' ? 0xffaaaa : 0xaaffaa;
                 g.beginFill(ent.color);
                 if (ent.faction === 'HERO') g.drawRect(-sz, -sz, sz * 2, sz * 2);
@@ -1129,40 +1183,57 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 if (ent.faction === 'HERO') g.drawRect(-sz, -sz, sz * 2, sz * 2);
                 else g.drawCircle(0, 0, sz);
                 g.lineStyle(0);
-                // HP bar as child Graphics (index 0)
-                g.addChild(new PIXI.Graphics());
-                g.eventMode = 'static'; g.cursor = 'pointer';
-                g.on('pointerover', (e) => { setHoveredEntity(ent); setTooltipPos({ x: e.client.x, y: e.client.y }); });
-                g.on('pointerout', () => setHoveredEntity(null));
-                g.on('pointermove', (e) => setTooltipPos({ x: e.client.x, y: e.client.y }));
-                el.addChild(g);
-                entityGfxPool.current.set(ent.id, g);
-            }
-            // Update position
-            g.x = ent.x; g.y = ent.y;
-            // Update HP bar (cheap: clear + redraw child)
-            const hpR = Math.max(0, ent.hp / ent.maxHp);
-            const barW = sz * 2 + 10;
-            const hpBar = g.children[0] as PIXI.Graphics;
-            hpBar.clear();
-            hpBar.beginFill(0x000000, 0.7); hpBar.drawRect(-barW / 2, -sz - 15, barW, 8);
-            const barC = hpR > 0.5 ? 0x44ff44 : hpR > 0.25 ? 0xffaa00 : 0xff3333;
-            hpBar.beginFill(barC); hpBar.drawRect(-barW / 2, -sz - 15, barW * hpR, 8); hpBar.endFill();
 
-            // --- Area Visualization (Aura) ---
-            if (ent.faction === 'DEMON' && ent.passiveAbilities) {
-                ent.passiveAbilities.forEach(pa => {
-                    if (pa.type === 'AURA_REGEN') {
-                        const range = pa.range || 100;
-                        const pulse = 0.1 + 0.1 * Math.sin(stateRef.current.frameCount * 0.1);
-                        hpBar.lineStyle(2, 0x44ff44, 0.3 + pulse);
-                        hpBar.drawCircle(0, 0, range);
-                        hpBar.lineStyle(0);
-                        hpBar.beginFill(0x44ff44, 0.05 + pulse * 0.5);
-                        hpBar.drawCircle(0, 0, range);
-                        hpBar.endFill();
-                    }
+                // HP bar container child at index 0
+                g.addChild(new PIXI.Graphics());
+
+                // Interaction
+                g.eventMode = 'static'; g.cursor = 'pointer';
+                g.on('pointerover', (e: PIXI.FederatedPointerEvent) => {
+                    setHoveredEntity(ent);
+                    setTooltipPos({ x: e.client.x, y: e.client.y });
                 });
+                g.on('pointerout', () => setHoveredEntity(null));
+                g.on('pointermove', (e: PIXI.FederatedPointerEvent) => {
+                    setTooltipPos({ x: e.client.x, y: e.client.y });
+                });
+
+                // Summon Animation
+                if (ent.faction === 'DEMON') {
+                    g.alpha = 0; g.scale.set(0.2);
+                    gsap.to(g, { alpha: 1, pixi: { scale: 1 }, duration: 0.5, ease: "back.out(1.5)" });
+                }
+            }
+
+            g.x = ent.x; g.y = ent.y;
+
+            // Dynamic HP Bar Update
+            const hpBar = g.children[0] as PIXI.Graphics;
+            if (hpBar) {
+                hpBar.clear();
+                const hpR = Math.max(0, ent.hp / ent.maxHp);
+                const barW = sz * 2 + 10;
+                hpBar.beginFill(0x000000, 0.7);
+                hpBar.drawRect(-barW / 2, -sz - 15, barW, 8);
+                const barC = hpR > 0.5 ? 0x44ff44 : hpR > 0.25 ? 0xffaa00 : 0xff3333;
+                hpBar.beginFill(barC);
+                hpBar.drawRect(-barW / 2, -sz - 15, barW * hpR, 8);
+                hpBar.endFill();
+
+                if (ent.faction === 'DEMON' && ent.passiveAbilities) {
+                    ent.passiveAbilities.forEach(pa => {
+                        if (pa.type === 'AURA_REGEN') {
+                            const auraRange = pa.range || 100;
+                            const pulse = 0.1 + 0.1 * Math.sin(stateRef.current.frameCount * 0.1);
+                            hpBar.lineStyle(2, 0x44ff44, 0.3 + pulse);
+                            hpBar.drawCircle(0, 0, auraRange);
+                            hpBar.lineStyle(0);
+                            hpBar.beginFill(0x44ff44, 0.05 + pulse * 0.5);
+                            hpBar.drawCircle(0, 0, auraRange);
+                            hpBar.endFill();
+                        }
+                    });
+                }
             }
 
             // Elite glow (alpha update only)
@@ -1170,60 +1241,56 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 const pulse = 0.5 + 0.5 * Math.sin(stateRef.current.frameCount * 0.15);
                 g.alpha = 0.85 + pulse * 0.15;
                 g.tint = 0xffd700;
-            } else { g.alpha = 1; g.tint = 0xffffff; }
+            } else {
+                g.alpha = 1;
+                g.tint = 0xffffff;
+            }
         });
 
         // ── Projectiles (pool by id) ──
-        const pl = projectilesLayerRef.current;
-        const livingProjIds = new Set(stateRef.current.projectiles.map(p => p.id));
-        projGfxPool.current.forEach((g, id) => {
-            if (!livingProjIds.has(id)) {
-                pl.removeChild(g); g.destroy(); projGfxPool.current.delete(id);
-            }
-        });
-        stateRef.current.projectiles.forEach(proj => {
-            let g = projGfxPool.current.get(proj.id);
-            if (!g) { g = new PIXI.Graphics(); pl.addChild(g); projGfxPool.current.set(proj.id, g); }
-            g.clear();
-            if (proj.isArea) {
+        // ── Area projectiles: batched Graphics (pulsing animation, few in number) ──
+        if (areaBatchRef.current) {
+            const ab = areaBatchRef.current;
+            ab.clear();
+            const fc = stateRef.current.frameCount;
+            stateRef.current.projectiles.forEach(proj => {
+                if (!proj.isArea) return;
                 const range = proj.areaRadius || 60;
-                const pulse = 0.15 + 0.1 * Math.sin(stateRef.current.frameCount * 0.2);
-                g.beginFill(proj.color, 0.1 + pulse);
-                g.drawCircle(0, 0, range);
-                g.endFill();
-                g.lineStyle(2, proj.color, 0.4 + pulse);
-                g.drawCircle(0, 0, range);
-                g.lineStyle(0);
-                // Core
-                g.beginFill(0xffffff, 0.8); g.drawCircle(0, 0, proj.size); g.endFill();
-            } else if (proj.style === 'arrow') {
-                proj.trail.forEach((pt, ti) => {
-                    g!.beginFill(proj.color, (ti / proj.trail.length) * 0.4);
-                    g!.drawCircle(pt.x - proj.x, pt.y - proj.y, 3); g!.endFill();
-                });
-                g.lineStyle(2, proj.color, 1);
-                const len = 14;
-                g.moveTo(-Math.cos(proj.angle) * len, -Math.sin(proj.angle) * len); g.lineTo(0, 0); g.lineStyle(0);
-                g.beginFill(0xffffcc);
-                g.drawPolygon([0, 0, -Math.cos(proj.angle - 0.5) * 6, -Math.sin(proj.angle - 0.5) * 6, -Math.cos(proj.angle + 0.5) * 6, -Math.sin(proj.angle + 0.5) * 6]);
-                g.endFill();
-            } else if (proj.style === 'orb') {
-                g.beginFill(proj.color, 0.25); g.drawCircle(0, 0, proj.size * 2.5); g.endFill();
-                proj.trail.forEach((pt, ti) => {
-                    g!.beginFill(proj.color, (ti / proj.trail.length) * 0.35);
-                    g!.drawCircle(pt.x - proj.x, pt.y - proj.y, proj.size * 0.8); g!.endFill();
-                });
-                g.beginFill(0xffffff, 0.8); g.drawCircle(0, 0, proj.size * 0.5); g.endFill();
-                g.beginFill(proj.color, 0.9); g.drawCircle(0, 0, proj.size); g.endFill();
-            } else if (proj.style === 'bomb') {
-                g.beginFill(0xff6600, 0.4); g.drawCircle(0, 0, proj.size * 2.5); g.endFill();
-                g.beginFill(0xff2200, 0.9); g.drawCircle(0, 0, proj.size); g.endFill();
-                g.lineStyle(1.5, 0xffff00, 0.8);
-                g.moveTo(0, -proj.size); g.lineTo(0, proj.size);
-                g.moveTo(-proj.size, 0); g.lineTo(proj.size, 0); g.lineStyle(0);
-            }
-            g.x = proj.x; g.y = proj.y;
-        });
+                const pulse = 0.15 + 0.1 * Math.sin(fc * 0.2);
+                ab.beginFill(proj.color, 0.1 + pulse); ab.drawCircle(proj.x, proj.y, range); ab.endFill();
+                ab.lineStyle(2, proj.color, 0.4 + pulse); ab.drawCircle(proj.x, proj.y, range); ab.lineStyle(0);
+                ab.beginFill(0xffffff, 0.8); ab.drawCircle(proj.x, proj.y, proj.size); ab.endFill();
+            });
+        }
+
+        // ── Non-area projectiles: Sprite pool (position/tint update only, no tessellation) ──
+        if (projContainerRef.current) {
+            const pc = projContainerRef.current;
+            const activeIds = new Set(stateRef.current.projectiles.filter(p => !p.isArea).map(p => p.id));
+
+            projSpritePool.current.forEach((sprite, id) => {
+                if (!activeIds.has(id)) { pc.removeChild(sprite); sprite.destroy(); projSpritePool.current.delete(id); }
+            });
+
+            stateRef.current.projectiles.forEach(proj => {
+                if (proj.isArea) return;
+                let sprite = projSpritePool.current.get(proj.id);
+                if (!sprite) {
+                    const tex = projTexturesRef.current.get(proj.style);
+                    if (!tex) return;
+                    sprite = new PIXI.Sprite(tex);
+                    sprite.anchor.set(0.5);
+                    pc.addChild(sprite);
+                    projSpritePool.current.set(proj.id, sprite);
+                }
+                sprite.x = proj.x;
+                sprite.y = proj.y;
+                sprite.rotation = proj.angle;
+                sprite.tint = proj.color;
+                const scale = proj.size / 10;
+                sprite.scale.set(proj.style === 'arrow' ? 1 : scale);
+            });
+        }
 
         // ── Particles (single batched Graphics, no alloc) ──
         if (particleBatchRef.current) {
@@ -1253,7 +1320,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     };
 
     return (
-        <div className="defense-phase" style={{ position: 'relative', width: '100%', height: '100%', padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div className="defense-phase" style={{ position: 'relative', width: '100%', height: '100%', padding: 0, display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-start' }}>
             <div className="canvas-container" ref={pixiContainerRef} style={{ cursor: 'default', border: '2px solid #330000', borderRadius: '4px', overflow: 'hidden' }} />
 
             {hoveredEntity && (
@@ -1265,7 +1332,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     boxShadow: '0 4px 12px rgba(0,0,0,0.5)', minWidth: '160px',
                 }}>
                     <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '6px', color: hoveredEntity.faction === 'HERO' ? '#ffaaaa' : '#aaffaa' }}>
-                        {hoveredEntity.type}
+                        {getUnitDisplayName(hoveredEntity.type)}
                         <span style={{ fontSize: '11px', marginLeft: '8px', color: '#888' }}>{hoveredEntity.faction === 'HERO' ? '英雄軍' : '魔王軍'}</span>
                     </div>
                     <div style={{ fontSize: '13px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
