@@ -13,7 +13,7 @@ const BestiaryModal: React.FC<BestiaryModalProps> = ({ isOpen, onClose }) => {
     if (!isOpen) return null;
 
     const units = Object.entries(UNIT_STATS).filter(([id]) => {
-        const isHero = ['村人', '農夫', '弓兵', '剣士', 'シーフ', '魔法使い', '重騎士', 'プリースト', '聖騎士', 'パラディン', '大魔道士', '勇者'].includes(id);
+        const isHero = ['村人', '農夫', '弓兵', '剣士', '魔法使い', '重騎士', 'プリースト', '聖騎士', 'パラディン', '大魔道士', '勇者'].includes(id);
         return activeTab === 'HERO' ? isHero : !isHero && id !== 'zombie';
     });
 

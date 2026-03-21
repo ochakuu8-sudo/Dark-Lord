@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState } from 'react';
-import { ALL_RECIPES, INITIAL_RECIPES, ROWS, COLS, BOARD_WIDTH, MAX_AP, AP_PER_DAY, AP_GAUGE_MAX } from '../game/config';
+import { ALL_RECIPES, ROWS, COLS, BOARD_WIDTH, MAX_AP, AP_PER_DAY, AP_GAUGE_MAX } from '../game/config';
 import type { Recipe } from '../game/config';
 
 export type GamePhase = 'TITLE' | 'PREPARATION' | 'RITUAL' | 'BATTLE' | 'RESULT';
@@ -61,6 +61,11 @@ interface GameState {
     incomingEnemies: any[];
     generateWave: (day: number) => void;
     dropMaterials: (day: number) => number;
+
+    // 共有PIXIアプリ（DefensePhaseが所有、RitualPhaseが借用）
+    pixiAppRef: React.MutableRefObject<any | null>;
+    pixiAppVersion: number; // アプリ初期化/破棄時にインクリメント
+    registerPixiApp: (app: any | null) => void;
 }
 
 const GameContext = createContext<GameState | undefined>(undefined);
@@ -69,14 +74,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [phase, setPhase] = useState<GamePhase>('TITLE');
     const [summonedMonsters, setSummonedMonsters] = useState<SummonedUnit[]>([]);
 
-    // レシピ装備システム (6枠)
-    const [unlockedRecipes, setUnlockedRecipes] = useState<string[]>(ALL_RECIPES.map(r => r.id)); // 初期解放
-    const [equippedRecipes, setEquippedRecipes] = useState<(string | null)[]>([
-        ALL_RECIPES[0]?.id || null,
-        ALL_RECIPES[1]?.id || null,
-        ALL_RECIPES[2]?.id || null,
-        null, null, null
-    ]);
+    // レシピ装備システム（上限なし・デバッグ中は全装備）
+    const [unlockedRecipes, setUnlockedRecipes] = useState<string[]>(ALL_RECIPES.map(r => r.id));
+    const [equippedRecipes, setEquippedRecipes] = useState<(string | null)[]>(ALL_RECIPES.map(r => r.id));
     const activeRecipes = equippedRecipes
         .map(id => ALL_RECIPES.find(r => r.id === id))
         .filter((r): r is Recipe => r !== undefined);
@@ -95,6 +95,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const maxAp = MAX_AP;
     const [apGauge, setApGauge] = useState<number>(0);
     const apGaugeRef = React.useRef<number>(0);
+
+    // 共有PIXIアプリ
+    const pixiAppRef = React.useRef<any | null>(null);
+    const [pixiAppVersion, setPixiAppVersion] = React.useState(0);
+    const registerPixiApp = React.useCallback((app: any | null) => {
+        pixiAppRef.current = app;
+        setPixiAppVersion(v => v + 1);
+    }, []);
 
     const addSummonedMonster = React.useCallback((unit: SummonedUnit) => {
         setSummonedMonsters(prev => [unit, ...prev]);
@@ -135,6 +143,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const incrementDay = React.useCallback(() => {
         setCurrentDay(prev => prev + 1);
+        setSummonedMonsters([]); // 戦闘盤面リセット
     }, []);
 
     const addGold = React.useCallback((amount: number) => {
@@ -195,7 +204,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const generateWave = React.useCallback((day: number) => {
         const enemies = [];
         const count = 3 + day * 2;
-        const types: HeroType[] = ['村人', '農夫', '弓兵', 'シーフ'];
+        const types: HeroType[] = ['村人', '農夫', '弓兵'];
         for (let i = 0; i < count; i++) {
             const type = types[Math.floor(Math.random() * types.length)];
             enemies.push({ 
@@ -221,12 +230,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const resetGame = React.useCallback(() => {
         setSummonedMonsters([]);
-        setEquippedRecipes([
-            ALL_RECIPES[0]?.id || null,
-            ALL_RECIPES[1]?.id || null,
-            ALL_RECIPES[2]?.id || null,
-            null, null, null
-        ]);
+        setEquippedRecipes(ALL_RECIPES.map(r => r.id));
         setCurrentDay(1);
         setGold(100);
         setOwnedRelics([]);
@@ -251,7 +255,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             pendingPuzzlePieces, addPendingPuzzlePiece, consumePendingPuzzlePieces,
             ap, maxAp, spendAp, refillAp, apGauge, addApGauge,
             expectedSummons, setExpectedSummons,
-            fieldWidth, incomingEnemies, generateWave, dropMaterials
+            fieldWidth, incomingEnemies, generateWave, dropMaterials,
+            pixiAppRef, pixiAppVersion, registerPixiApp
         }}>
             {children}
         </GameContext.Provider>

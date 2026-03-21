@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import * as PIXI from 'pixi.js';
 import gsap from 'gsap';
 import { useGame } from '../contexts/GameContext';
 import {
     COLORS, PIECE_EMOJIS, ALL_RECIPES, AP_GAUGE_MAX, AP_GAUGE_PER_MATCH,
+    ROWS, COLS, BLOCK_SIZE, RECIPE_EMOJIS, MATERIAL_BG_COLORS,
     type Recipe
 } from '../game/config';
 import { UNIT_STATS } from '../game/entities';
 import type { SummonedUnit } from '../contexts/GameContext';
 import BestiaryModal from './BestiaryModal';
+
+const SIDE_PANEL_WIDTH = 260;
 
 interface BlockData {
     type: number; row: number; col: number; id: string;
@@ -30,18 +34,17 @@ const getMonsterDisplayName = (monsterType: string): string => {
     return monsterType;
 };
 
-import { ROWS, COLS, BLOCK_SIZE } from '../game/config';
-
 const RitualPhase: React.FC = () => {
     const {
         activeRecipes, addSummonedMonsters,
-        setPhase,
+        setPhase, currentDay,
         ritualGrid: storedGrid, saveRitualGrid,
         setExpectedSummons,
         expectedSummons,
         ap, spendAp,
         apGauge, addApGauge,
-        fieldWidth
+        fieldWidth,
+        pixiAppRef, pixiAppVersion
     } = useGame();
 
     const curRows = ROWS;
@@ -50,8 +53,7 @@ const RitualPhase: React.FC = () => {
     const curWidth = COLS * BLOCK_SIZE;
     const curHeight = ROWS * BLOCK_SIZE;
 
-    // 状態の初期化
-    const pixiContainerRef = useRef<HTMLDivElement>(null);
+    // 自前のPIXIアプリは持たない。DefensePhaseが所有するアプリを共有する。
     const appRef = useRef<PIXI.Application | null>(null);
 
     // Layers
@@ -75,6 +77,45 @@ const RitualPhase: React.FC = () => {
     const [hasSummoned, setHasSummoned] = useState(false);
     const [comboCount, setComboCount] = useState(0);
     const [comboKey, setComboKey] = useState(0); // アニメーション再トリガー用
+    const [flashCells, setFlashCells] = useState<{ r: number; c: number }[]>([]);
+    const [isDraggingSummoned, setIsDraggingSummoned] = useState(false);
+    const sellZoneRef = useRef<HTMLDivElement>(null);
+
+    const audioCtxRef = useRef<AudioContext | null>(null);
+
+    const playComboSound = useCallback((comboN: number) => {
+        try {
+            if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+            const ctx = audioCtxRef.current;
+            if (ctx.state === 'suspended') ctx.resume();
+            // ペンタトニックスケールで上昇
+            const freqs = [440, 523, 659, 784, 988, 1175];
+            const freq = freqs[Math.min(comboN - 1, freqs.length - 1)];
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = comboN >= 5 ? 'square' : comboN >= 3 ? 'triangle' : 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.35);
+            if (comboN >= 5) {
+                // FEVERは和音追加
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                osc2.type = 'sine';
+                osc2.frequency.value = freq * 1.5;
+                gain2.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+                osc2.start(ctx.currentTime);
+                osc2.stop(ctx.currentTime + 0.5);
+            }
+        } catch (_) { /* AudioContext unavailable */ }
+    }, []);
 
     const blockPool = useRef<number[]>([]);
     const activeRecipesRef = useRef<(Recipe)[]>([]);
@@ -157,26 +198,32 @@ const RitualPhase: React.FC = () => {
         if (block.isSummoned && block.monsterType) {
             const stats = UNIT_STATS[block.monsterType];
             const unitColor = stats?.color ?? 0xffcc00;
-            // 金色の光彩
+            // モンスタータイプからレシピIDと素材を分離 (例: 'goblin_bone' → recipeId='goblin', material='bone')
+            const lastUnderscore = block.monsterType.lastIndexOf('_');
+            const recipeId = lastUnderscore >= 0 ? block.monsterType.slice(0, lastUnderscore) : block.monsterType;
+            const material = lastUnderscore >= 0 ? block.monsterType.slice(lastUnderscore + 1) : '';
+            const bgColor = MATERIAL_BG_COLORS[material] ?? 0x1a1000;
+            const emoji = RECIPE_EMOJIS[recipeId] ?? '👾';
+            // 光彩
             const glow = new PIXI.Graphics();
             glow.beginFill(unitColor, 0.25);
             glow.drawRoundedRect(-curBlockSize / 2 - 4, -curBlockSize / 2 - 4, curBlockSize + 8, curBlockSize + 8, 16);
             glow.endFill();
             container.addChild(glow);
             gsap.to(glow, { alpha: 0.6, duration: 0.9, repeat: -1, yoyo: true, ease: "sine.inOut" });
-            // 背景
+            // 背景（素材カラー）
             const bg = new PIXI.Graphics();
-            bg.beginFill(0x1a1000);
+            bg.beginFill(bgColor);
             bg.drawRoundedRect(-curBlockSize / 2 + 2, -curBlockSize / 2 + 2, curBlockSize - 4, curBlockSize - 4, 12);
             bg.endFill();
             container.addChild(bg);
-            // 枠（金色）
+            // 枠（ユニットカラー）
             const edge = new PIXI.Graphics();
             edge.lineStyle(2, unitColor, 1.0);
             edge.drawRoundedRect(-curBlockSize / 2 + 5, -curBlockSize / 2 + 5, curBlockSize - 10, curBlockSize - 10, 10);
             container.addChild(edge);
-            // 魔物アイコン
-            const iconTxt = new PIXI.Text('👹', new PIXI.TextStyle({ fontSize: Math.floor(curBlockSize * 0.42), align: 'center' }));
+            // 魔物アイコン（レシピ別絵文字）
+            const iconTxt = new PIXI.Text(emoji, new PIXI.TextStyle({ fontSize: Math.floor(curBlockSize * 0.42), align: 'center' }));
             iconTxt.anchor.set(0.5, 0.6);
             container.addChild(iconTxt);
             // 魔物名
@@ -203,17 +250,40 @@ const RitualPhase: React.FC = () => {
                 blocksLayerRef.current?.sortChildren();
                 if (!appRef.current) return;
                 const canvas = appRef.current.view as HTMLCanvasElement;
+                const rect0 = canvas.getBoundingClientRect();
+                const scaleX0 = ((appRef.current as any)?.renderer?.width ?? rect0.width) / rect0.width;
+                const scaleY0 = ((appRef.current as any)?.renderer?.height ?? rect0.height) / rect0.height;
+                let rafId0: number | null = null;
+                setIsDraggingSummoned(true);
                 const onPointerMove = (e: PointerEvent) => {
-                    const rect = canvas.getBoundingClientRect();
-                    const px = (e.clientX - rect.left) * (curWidth / rect.width);
-                    const py = (e.clientY - rect.top) * (curHeight / rect.height);
+                    const px = (e.clientX - rect0.left) * scaleX0;
+                    const py = (e.clientY - rect0.top) * scaleY0;
                     if (gfx) { gfx.x = initX + (px - startGlobalX); gfx.y = initY + (py - startGlobalY); }
                     renderLinks();
+                    if (rafId0 !== null) cancelAnimationFrame(rafId0);
+                    rafId0 = requestAnimationFrame(() => {
+                        appRef.current?.renderer.render(appRef.current.stage);
+                        rafId0 = null;
+                    });
                 };
-                const onPointerUp = () => {
+                const onPointerUp = (e: PointerEvent) => {
                     window.removeEventListener('pointermove', onPointerMove);
                     window.removeEventListener('pointerup', onPointerUp);
+                    setIsDraggingSummoned(false);
                     if (!gfx) { interactionParams.current.isDragging = false; return; }
+                    // 売却ゾーンにドロップしたら売却
+                    const sellRect = sellZoneRef.current?.getBoundingClientRect();
+                    if (sellRect && e.clientX >= sellRect.left && e.clientX <= sellRect.right && e.clientY >= sellRect.top && e.clientY <= sellRect.bottom) {
+                        gfx.zIndex = 0; gfx.scale.set(1);
+                        interactionParams.current.isDragging = false;
+                        const ng = gridRef.current.map(r => r ? [...r] : Array(curCols).fill(null));
+                        ng[block.row][block.col] = null;
+                        gridRef.current = ng;
+                        setGrid([...ng.map(r => [...r])]);
+                        saveRitualGrid(ng);
+                        addApGauge(AP_GAUGE_MAX);
+                        return;
+                    }
                     const tr = Math.floor(gfx.y / curBlockSize);
                     const tc = Math.floor(gfx.x / curBlockSize);
                     if (tr >= 0 && tr < curRows && tc >= 0 && tc < curCols) {
@@ -320,13 +390,16 @@ const RitualPhase: React.FC = () => {
 
             if (!appRef.current) return;
             const canvas = appRef.current.view as HTMLCanvasElement;
+            // getBoundingClientRect はドラッグ開始時に1回だけ取得
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = ((appRef.current as any)?.renderer?.width ?? rect.width) / rect.width;
+            const scaleY = ((appRef.current as any)?.renderer?.height ?? rect.height) / rect.height;
 
             let rafId: number | null = null;
             const onPointerMove = (moveEvent: PointerEvent) => {
                 if (!interactionParams.current.isDragging) return;
-                const rect = canvas.getBoundingClientRect();
-                const pixiX = (moveEvent.clientX - rect.left) * (curWidth / rect.width);
-                const pixiY = (moveEvent.clientY - rect.top) * (curHeight / rect.height);
+                const pixiX = (moveEvent.clientX - rect.left) * scaleX;
+                const pixiY = (moveEvent.clientY - rect.top) * scaleY;
                 const dx = pixiX - startGlobalX;
                 const dy = pixiY - startGlobalY;
                 initialPositions.forEach(pos => {
@@ -418,45 +491,11 @@ const RitualPhase: React.FC = () => {
                     layer.addChild(g);
                     blockGraphicsMap.current.set(block.id, g);
                 } else {
-                    // 空マスのプレースホルダー描画
-                    const empty = new PIXI.Graphics();
-                    // 薄い背景
-                    empty.beginFill(0x111118, 0.5);
-                    empty.drawRoundedRect(-curBlockSize / 2 + 4, -curBlockSize / 2 + 4, curBlockSize - 8, curBlockSize - 8, 10);
-                    empty.endFill();
-                    // 点線風の枠
-                    empty.lineStyle(1, 0x333344, 0.6);
-                    empty.drawRoundedRect(-curBlockSize / 2 + 6, -curBlockSize / 2 + 6, curBlockSize - 12, curBlockSize - 12, 8);
-                    // 中央に小さな十字マーク
-                    empty.lineStyle(1, 0x222233, 0.4);
-                    empty.moveTo(-6, 0); empty.lineTo(6, 0);
-                    empty.moveTo(0, -6); empty.lineTo(0, 6);
-
-                    empty.x = ci * curBlockSize + curBlockSize / 2;
-                    empty.y = ri * curBlockSize + curBlockSize / 2;
-                    layer.addChild(empty);
+                    // 空マス：DefensePhaseのグリッドを透かすため何も描画しない
                 }
             });
         });
-        // 行がない場合（初期化前）全マスにプレースホルダーを描画
-        if (!gridRef.current || gridRef.current.length === 0) {
-            for (let ri = 0; ri < curRows; ri++) {
-                for (let ci = 0; ci < curCols; ci++) {
-                    const empty = new PIXI.Graphics();
-                    empty.beginFill(0x111118, 0.5);
-                    empty.drawRoundedRect(-curBlockSize / 2 + 4, -curBlockSize / 2 + 4, curBlockSize - 8, curBlockSize - 8, 10);
-                    empty.endFill();
-                    empty.lineStyle(1, 0x333344, 0.6);
-                    empty.drawRoundedRect(-curBlockSize / 2 + 6, -curBlockSize / 2 + 6, curBlockSize - 12, curBlockSize - 12, 8);
-                    empty.lineStyle(1, 0x222233, 0.4);
-                    empty.moveTo(-6, 0); empty.lineTo(6, 0);
-                    empty.moveTo(0, -6); empty.lineTo(0, 6);
-                    empty.x = ci * curBlockSize + curBlockSize / 2;
-                    empty.y = ri * curBlockSize + curBlockSize / 2;
-                    layer.addChild(empty);
-                }
-            }
-        }
+        // 行がない場合（初期化前）も描画不要（DefensePhaseを透かす）
         renderLinks();
     }, [curBlockSize, curRows, curCols, createBlockGraphics, renderLinks]);
 
@@ -481,6 +520,8 @@ const RitualPhase: React.FC = () => {
 
     const findMatches = useCallback(() => {
         const summons: SummonedUnit[] = [];
+        const recipeIds: string[] = [];
+        const matchGroups: { r: number; c: number }[][] = [];
         const newMatchedCells = new Set<string>();
         // 同一レシピ×同一セル集合の重複召喚を防ぐ
         const seenMatchKeys = new Set<string>();
@@ -501,7 +542,7 @@ const RitualPhase: React.FC = () => {
                                 const patternVal = p[pr][pc];
                                 if (patternVal === -1) continue;
                                 const cell = gridRef.current[r + pr][c + pc];
-                                if (!cell) { match = false; break; }
+                                if (!cell || cell.isSummoned) { match = false; break; }
 
                                 if (patternVal === 9) {
                                     if (wildcardType === -1) {
@@ -547,6 +588,8 @@ const RitualPhase: React.FC = () => {
                                 r: targetR, c: targetC,
                                 attackBonus: 0, hpBonus: 0
                             });
+                            recipeIds.push(recipe.id);
+                            matchGroups.push([...currentMatchCells]);
                         }
                     }
                 }
@@ -563,7 +606,7 @@ const RitualPhase: React.FC = () => {
         const used = Array(curRows).fill(null).map((_, r) =>
             Array(curCols).fill(null).map((_, c) => newMatchedCells.has(`${r},${c}`))
         );
-        return { used, matchedCells: newMatchedCells, summons };
+        return { used, matchedCells: newMatchedCells, summons, recipeIds, matchGroups };
     }, [curRows, curCols, generateId, setExpectedSummons]);
 
     const handleDropMaterial = useCallback(() => {
@@ -598,43 +641,50 @@ const RitualPhase: React.FC = () => {
     const handleSummon = useCallback(() => {
         const result = findMatches();
         if (!result) return;
-        const { used, summons } = result;
+        const { used, summons, matchGroups } = result;
         if (summons.length === 0) return;
 
-        const ng = gridRef.current.map((row, ri) =>
-            row ? row.map((cell, ci) => (cell && used[ri][ci] ? null : cell)) : Array(curCols).fill(null)
-        );
-        // 召喚された魔物を盤面に配置
-        summons.forEach(unit => {
-            const place = (r: number, c: number) => {
-                if (ng[r] && ng[r][c] === null) {
-                    ng[r][c] = { id: generateId(), type: -1, row: r, col: c, isSummoned: true, monsterType: unit.type };
-                    return true;
-                }
-                return false;
-            };
-            if (!place(unit.r, unit.c)) {
-                // 元の位置が埋まっていたら近くの空きマスを探す
-                for (let r = 0; r < curRows; r++)
-                    for (let c = 0; c < curCols; c++)
-                        if (place(r, c)) return;
-            }
-        });
-
-        gridRef.current = ng;
-        setGrid([...ng.map(r => [...r])]);
-        saveRitualGrid(ng);
         setHasSummoned(true);
 
-        // コンボAPゲージ加算（マッチ数 × AP_GAUGE_PER_MATCH）
-        addApGauge(summons.length * AP_GAUGE_PER_MATCH);
+        // 1召喚ごとに順番にコンボ演出・AP加算
+        const STEP_MS = 450;
+        matchGroups.forEach((cells, i) => {
+            setTimeout(() => {
+                setFlashCells(cells);
+                setComboCount(i + 1);
+                setComboKey(k => k + 1);
+                playComboSound(i + 1);
+                addApGauge(AP_GAUGE_PER_MATCH);
+                setTimeout(() => setFlashCells([]), 380);
+            }, i * STEP_MS);
+        });
 
-        // コンボ演出
-        if (summons.length >= 2) {
-            setComboCount(summons.length);
-            setComboKey(k => k + 1);
-        }
-    }, [findMatches, curRows, curCols, generateId, saveRitualGrid, addApGauge]);
+        // 全演出終了後に素材消費→モンスター配置
+        const totalAnimMs = (matchGroups.length - 1) * STEP_MS + 420;
+        setTimeout(() => {
+            const ng = gridRef.current.map((row, ri) =>
+                row ? row.map((cell, ci) => (cell && used[ri][ci] ? null : cell)) : Array(curCols).fill(null)
+            );
+            summons.forEach(unit => {
+                const place = (r: number, c: number) => {
+                    if (ng[r] && ng[r][c] === null) {
+                        ng[r][c] = { id: generateId(), type: -1, row: r, col: c, isSummoned: true, monsterType: unit.type };
+                        return true;
+                    }
+                    return false;
+                };
+                if (!place(unit.r, unit.c)) {
+                    for (let r = 0; r < curRows; r++)
+                        for (let c = 0; c < curCols; c++)
+                            if (place(r, c)) return;
+                }
+            });
+            gridRef.current = ng;
+            setGrid([...ng.map(r => [...r])]);
+            saveRitualGrid(ng);
+            setTimeout(() => setComboCount(0), 1400);
+        }, totalAnimMs);
+    }, [findMatches, curRows, curCols, generateId, saveRitualGrid, addApGauge, playComboSound]);
 
     useEffect(() => {
         activeRecipesRef.current = activeRecipes;
@@ -651,53 +701,49 @@ const RitualPhase: React.FC = () => {
             targetGrid = Array(curRows).fill(null).map(() => Array(curCols).fill(null));
         }
 
-        // 10ツモ（20ピース）を盤面に配置してスタート（落下アニメーション付き）
-        const pool = blockPool.current;
-        const rnd = () => Math.random().toString(36).substr(2, 9);
-        const drawOne = () => pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : Math.floor(Math.random() * 3);
-        for (let i = 0; i < 10; i++) {
-            const t0 = drawOne();
-            const t1 = drawOne();
-            const candidates: { r0: number; c0: number; r1: number; c1: number }[] = [];
-            for (let r = 0; r < curRows; r++) {
-                for (let c = 0; c < curCols; c++) {
-                    if (!targetGrid[r][c]) {
-                        if (c + 1 < curCols && !targetGrid[r][c + 1]) candidates.push({ r0: r, c0: c, r1: r, c1: c + 1 });
-                        if (r + 1 < curRows && !targetGrid[r + 1][c]) candidates.push({ r0: r, c0: c, r1: r + 1, c1: c });
+        if (currentDay <= 1) {
+            // Day 1: 10ツモ（20ピース）を盤面に配置してスタート（落下アニメーション付き）
+            const pool = blockPool.current;
+            const rnd = () => Math.random().toString(36).substr(2, 9);
+            const drawOne = () => pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : Math.floor(Math.random() * 3);
+            for (let i = 0; i < 10; i++) {
+                const t0 = drawOne();
+                const t1 = drawOne();
+                const candidates: { r0: number; c0: number; r1: number; c1: number }[] = [];
+                for (let r = 0; r < curRows; r++) {
+                    for (let c = 0; c < curCols; c++) {
+                        if (!targetGrid[r][c]) {
+                            if (c + 1 < curCols && !targetGrid[r][c + 1]) candidates.push({ r0: r, c0: c, r1: r, c1: c + 1 });
+                            if (r + 1 < curRows && !targetGrid[r + 1][c]) candidates.push({ r0: r, c0: c, r1: r + 1, c1: c });
+                        }
                     }
                 }
+                if (candidates.length === 0) break;
+                const choice = candidates[Math.floor(Math.random() * candidates.length)];
+                const groupId = `g-${rnd()}`;
+                const id0 = rnd(); const id1 = rnd();
+                const delay = i * 0.07;
+                newlyPlacedIds.current.add(id0);
+                newlyPlacedIds.current.add(id1);
+                targetGrid[choice.r0][choice.c0] = { id: id0, type: t0, row: choice.r0, col: choice.c0, groupId, dropDelay: delay };
+                targetGrid[choice.r1][choice.c1] = { id: id1, type: t1, row: choice.r1, col: choice.c1, groupId, dropDelay: delay + 0.035 };
             }
-            if (candidates.length === 0) break;
-            const choice = candidates[Math.floor(Math.random() * candidates.length)];
-            const groupId = `g-${rnd()}`;
-            const id0 = rnd(); const id1 = rnd();
-            const delay = i * 0.07;
-            newlyPlacedIds.current.add(id0);
-            newlyPlacedIds.current.add(id1);
-            targetGrid[choice.r0][choice.c0] = { id: id0, type: t0, row: choice.r0, col: choice.c0, groupId, dropDelay: delay };
-            targetGrid[choice.r1][choice.c1] = { id: id1, type: t1, row: choice.r1, col: choice.c1, groupId, dropDelay: delay + 0.035 };
+        } else {
+            // Day 2+: 盤面はそのまま引き継ぎ、APを配布
+            addApGauge(AP_GAUGE_MAX);
         }
 
-        // setGrid()を呼ばずgridRefだけ更新する。
-        // setGrid()するとuseEffect([grid])が発火→renderGrid再実行→アニメーション中のgsapオブジェクトが破棄される。
-        // PIXI初期化後のrenderGrid()1回でアニメーションを完結させる。
         gridRef.current = targetGrid;
         saveRitualGrid(targetGrid);
-    }, [activeRecipes, storedGrid, curRows, curCols, saveRitualGrid]);
+    }, [activeRecipes, storedGrid, curRows, curCols, saveRitualGrid, currentDay, addApGauge]);
 
     useEffect(() => {
-        if (!pixiContainerRef.current) return;
-        const devicePixelRatio = window.devicePixelRatio || 1;
-        // 高解像度ディスプレイかつ大きいキャンバスでのクラッシュ防止（合計ピクセル数を4096px幅相当に制限）
-        const safeResolution = (curWidth * devicePixelRatio > 4096) ? Math.max(1, 4096 / curWidth) : devicePixelRatio;
-
-        const app = new PIXI.Application({
-            width: curWidth, height: curHeight,
-            backgroundAlpha: 0,
-            antialias: true, resolution: safeResolution
-        });
-        pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
+        // DefensePhaseが所有する共有PIXIアプリを使う（自前アプリは作らない）
+        const app = pixiAppRef.current;
+        if (!app) return;
         appRef.current = app;
+
+        // 儀式レイヤー群を共有ステージの最前面に追加
         const bg = new PIXI.Graphics(); app.stage.addChild(bg); bgLayerRef.current = bg;
         const boost = new PIXI.Container(); app.stage.addChild(boost); boostLayerRef.current = boost;
         const links = new PIXI.Container(); app.stage.addChild(links); linksLayerRef.current = links;
@@ -705,14 +751,23 @@ const RitualPhase: React.FC = () => {
         const usage = new PIXI.Graphics(); app.stage.addChild(usage); usageLayerRef.current = usage;
         const preview = new PIXI.Container(); app.stage.addChild(preview); previewLayerRef.current = preview;
         blocks.sortableChildren = true;
-        app.stage.eventMode = 'static';
-        app.stage.hitArea = new PIXI.Rectangle(0, 0, curWidth, curHeight);
-        // renderGrid()はここで呼ばない。
-        // Effect順: グリッド初期化(1) → PIXI初期化(2) → [grid](3)
-        // (2)でrenderGridを呼ぶと(3)がアニメーション中のオブジェクトを破棄してしまう。
-        // (3)が実行される時点でPIXIは準備済みなので、(3)だけにレンダリングを任せる。
-        return () => { blocksLayerRef.current = null; linksLayerRef.current = null; bgLayerRef.current = null; app.destroy(true, { children: true }); appRef.current = null; };
-    }, [curWidth, curHeight, renderGrid]);
+
+        // レイヤー構築後にグリッドを描画（pixiAppVersionが変わってレイヤーが作り直された場合もここで復元）
+        const result = findMatches();
+        renderGrid(result?.matchedCells);
+
+        // アンマウント時：儀式レイヤーを共有ステージから除去（アプリ自体は破棄しない）
+        return () => {
+            [bgLayerRef, boostLayerRef, linksLayerRef, blocksLayerRef, usageLayerRef, previewLayerRef].forEach(ref => {
+                if (ref.current && !(ref.current as any).destroyed) {
+                    app.stage.removeChild(ref.current as any);
+                    (ref.current as any).destroy({ children: true });
+                }
+                ref.current = null;
+            });
+            appRef.current = null;
+        };
+    }, [pixiAppVersion, pixiAppRef, renderGrid, findMatches]);
 
     useEffect(() => {
         const result = findMatches();
@@ -722,94 +777,241 @@ const RitualPhase: React.FC = () => {
     const comboLabel = comboCount >= 5 ? '🔥 FEVER!!' : comboCount >= 3 ? '⚡ GREAT!' : `${comboCount} COMBO!`;
     const comboColor = comboCount >= 5 ? '#ff4400' : comboCount >= 3 ? '#ffaa00' : '#66ddff';
 
-    return (
-        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: 'transparent', position: 'relative' }}>
-            {/* コンボ演出オーバーレイ */}
-            {comboCount >= 2 && (
-                <div key={comboKey} style={{
-                    position: 'absolute', top: 0, left: 0, width: curWidth, height: curHeight,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    pointerEvents: 'none', zIndex: 100,
-                    animation: 'comboAppear 1.4s ease-out forwards'
-                }}>
-                    <style>{`
-                        @keyframes comboAppear {
-                            0%   { opacity: 0; transform: scale(0.4); }
-                            15%  { opacity: 1; transform: scale(1.25); }
-                            30%  { transform: scale(1.0); }
-                            60%  { opacity: 1; }
-                            100% { opacity: 0; transform: scale(1.1) translateY(-30px); }
-                        }
-                    `}</style>
-                    <div style={{
-                        fontSize: comboCount >= 5 ? '64px' : '48px',
-                        fontWeight: 900,
-                        color: comboColor,
-                        textShadow: `0 0 20px ${comboColor}, 0 0 40px ${comboColor}, 2px 2px 0 #000`,
-                        letterSpacing: '4px',
-                        userSelect: 'none',
-                    }}>
-                        {comboLabel}
-                    </div>
-                </div>
-            )}
-            {/* キャンバス */}
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '0', width: '100%', justifyContent: 'flex-start', alignItems: 'flex-start', overflow: 'hidden' }}>
-                <div ref={pixiContainerRef} style={{ width: curWidth, height: curHeight, boxShadow: '0 0 40px rgba(0,0,0,0.5)', border: '2px solid rgba(255,255,255,0.1)', background: 'transparent', display: 'block' }} />
+    // 召喚プレビュー（現在マッチしている魔物リスト）
+    const summonPreview = expectedSummons.reduce<Record<string, number>>((acc, u) => {
+        acc[u.type] = (acc[u.type] || 0) + 1; return acc;
+    }, {});
+
+    // レシピパターン簡易表示用
+    const PIECE_COLORS_HEX: Record<number, string> = { 0: '#5577ff', 1: '#ff5544', 2: '#44ddaa' };
+    const PatternPreview = ({ pattern }: { pattern: number[][] }) => {
+        const cols = Math.max(...pattern.map(r => r.length));
+        return (
+            <div style={{ display: 'inline-grid', gridTemplateColumns: `repeat(${cols}, 12px)`, gap: '2px' }}>
+                {pattern.flatMap((row, ri) => row.map((val, ci) => (
+                    <div key={`${ri}-${ci}`} style={{
+                        width: 12, height: 12, borderRadius: 2,
+                        background: val === -1 ? 'transparent' : val === 9 ? '#ffdd44' : (PIECE_COLORS_HEX[val] ?? '#888'),
+                        border: val === 9 ? '1px solid #ffaa00' : 'none',
+                        opacity: val === -1 ? 0 : 1
+                    }} />
+                )))}
             </div>
-            <div style={{ height: '90px', background: '#121218', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', borderTop: '2px solid #222', padding: '6px 12px' }}>
-                {/* APゲージ */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', maxWidth: '500px' }}>
-                    <span style={{ color: '#aaddff', fontSize: '12px', whiteSpace: 'nowrap' }}>AP {ap}</span>
-                    <div style={{ flex: 1, height: '10px', background: '#1a1a2e', borderRadius: '5px', overflow: 'hidden', border: '1px solid #334' }}>
-                        <div style={{
-                            width: `${(apGauge / AP_GAUGE_MAX) * 100}%`,
-                            height: '100%',
-                            background: 'linear-gradient(90deg, #3355cc, #66aaff)',
-                            borderRadius: '5px',
-                            transition: 'width 0.3s ease'
-                        }} />
-                    </div>
-                    <span style={{ color: '#556', fontSize: '11px', whiteSpace: 'nowrap' }}>{apGauge}/{AP_GAUGE_MAX}</span>
-                </div>
-                {/* ボタン行 */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <button onClick={() => setIsBestiaryOpen(true)} style={{ padding: '6px 14px', background: '#522', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>図鑑</button>
-                    <button
-                        onClick={handleDropMaterial}
-                        disabled={ap === 0}
-                        style={{ padding: '6px 16px', background: ap > 0 ? '#333a55' : '#222', color: ap > 0 ? '#aaddff' : '#555', border: '1px solid ' + (ap > 0 ? '#5566aa' : '#333'), borderRadius: '4px', cursor: ap > 0 ? 'pointer' : 'not-allowed', fontSize: '12px', fontWeight: 'bold' }}
-                    >
-                        ⚡ 素材投入 (AP:{ap})
-                    </button>
-                    <button
-                        onClick={handleSummon}
-                        style={{ padding: '6px 20px', background: '#447', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
-                    >
-                        ✨ 召喚する
-                    </button>
-                    <button
-                        onClick={() => {
-                            const finalSummons: SummonedUnit[] = [];
-                            gridRef.current.forEach((row, ri) => row?.forEach((cell, ci) => {
-                                if (cell?.isSummoned && cell.monsterType) {
-                                    finalSummons.push({ id: generateId(), type: cell.monsterType, r: ri, c: ci, attackBonus: 0, hpBonus: 0 });
-                                }
-                            }));
-                            if (finalSummons.length > 0) addSummonedMonsters(finalSummons);
-                            const ng = gridRef.current.map(row => row?.map(cell => cell?.isSummoned ? null : cell) || []);
-                            saveRitualGrid(ng);
-                            setPhase('BATTLE');
-                        }}
-                        style={{ padding: '6px 20px', background: '#a22', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}
-                    >
-                        ⚔️ 戦闘へ
-                    </button>
+        );
+    };
+
+    const btnBase: React.CSSProperties = { border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', padding: '0', transition: 'opacity 0.15s' };
+
+    const panelSlot = document.getElementById('ritual-panel-slot');
+    const bottomSlot = document.getElementById('ritual-bottom-slot');
+
+    // ───── 左パネル：レシピ・図鑑・戦闘へ ─────
+    const leftPanel = (
+        <>
+        <div style={{
+            width: SIDE_PANEL_WIDTH, height: '100%',
+            background: 'rgba(8,6,18,0.96)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden'
+        }}>
+            {/* ヘッダー */}
+            <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid #1a1030', flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#cc88ff', fontWeight: 'bold', fontSize: '14px', letterSpacing: '2px' }}>☽ 召喚儀式</span>
+                    <span style={{ color: '#886699', fontSize: '11px' }}>Day {currentDay}</span>
                 </div>
             </div>
 
-            {isBestiaryOpen && <BestiaryModal isOpen={isBestiaryOpen} onClose={() => setIsBestiaryOpen(false)} />}
+            {/* 召喚プレビュー */}
+            {Object.keys(summonPreview).length > 0 && (
+                <div style={{ padding: '6px 14px', borderBottom: '1px solid #1a1030', flexShrink: 0 }}>
+                    <div style={{ color: '#aabb88', fontSize: '10px', marginBottom: '4px' }}>✨ 召喚できる魔物</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                        {Object.entries(summonPreview).map(([type, count]) => (
+                            <span key={type} style={{ background: '#1a2a1a', border: '1px solid #336633', borderRadius: '4px', padding: '1px 5px', fontSize: '10px', color: '#aaddaa' }}>
+                                {getMonsterDisplayName(type)} ×{count}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* アクティブレシピ一覧 */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 14px' }}>
+                <div style={{ color: '#886699', fontSize: '10px', marginBottom: '6px', letterSpacing: '1px' }}>📜 レシピ</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    {activeRecipes.map(recipe => (
+                        <div key={recipe.id} style={{
+                            background: '#100c1c', border: '1px solid #2a1a3a',
+                            borderRadius: '6px', padding: '5px 8px',
+                            display: 'flex', alignItems: 'center', gap: '6px'
+                        }}>
+                            <PatternPreview pattern={recipe.pattern} />
+                            <div style={{ color: '#888', fontSize: '11px' }}>→</div>
+                            <div style={{ fontSize: '10px', color: '#ccbbdd', lineHeight: 1.3 }}>
+                                <div style={{ fontWeight: 'bold' }}>{recipe.name}</div>
+                                <div style={{ color: '#665577', fontSize: '9px' }}>? = ワイルドカード</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* 売却ゾーン */}
+            <div ref={sellZoneRef} style={{
+                flexShrink: 0, margin: '8px 10px', padding: '10px',
+                border: `2px dashed ${isDraggingSummoned ? '#ff8844' : '#3a2030'}`,
+                borderRadius: '8px',
+                background: isDraggingSummoned ? 'rgba(255,80,20,0.12)' : 'rgba(20,10,15,0.6)',
+                textAlign: 'center', transition: 'all 0.15s',
+                pointerEvents: 'none',
+            }}>
+                <div style={{ fontSize: '18px', lineHeight: 1 }}>💰</div>
+                <div style={{ color: isDraggingSummoned ? '#ff8844' : '#553344', fontSize: '10px', marginTop: '3px' }}>
+                    {isDraggingSummoned ? 'ここで売却 +1AP' : '売却 (+1AP)'}
+                </div>
+            </div>
+
         </div>
+        {isBestiaryOpen && <BestiaryModal isOpen={isBestiaryOpen} onClose={() => setIsBestiaryOpen(false)} />}
+        </>
+    );
+
+    // ───── 下アクションバー：AP・召喚・スキル ─────
+    const bottomContent = (
+        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'stretch', padding: '8px 12px', gap: '10px', boxSizing: 'border-box' }}>
+            {/* AP・素材投入 */}
+            <div style={{ flex: '0 0 180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#aaddff', fontSize: '11px', fontWeight: 'bold' }}>⚡ AP</span>
+                    <span style={{ color: '#aaddff', fontSize: '16px', fontWeight: 'bold' }}>{ap}</span>
+                </div>
+                <div style={{ position: 'relative', height: '10px', background: '#0d0d20', borderRadius: '5px', overflow: 'hidden', border: '1px solid #223' }}>
+                    <div style={{ width: `${(apGauge / AP_GAUGE_MAX) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #2244bb, #66aaff)', borderRadius: '5px', transition: 'width 0.3s ease' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#445', fontSize: '9px' }}>コンボでゲージ増加</span>
+                    <span style={{ color: '#446', fontSize: '9px' }}>{apGauge}/{AP_GAUGE_MAX}</span>
+                </div>
+                <button
+                    onClick={handleDropMaterial} disabled={ap === 0}
+                    style={{ ...btnBase, height: '28px', marginTop: '2px',
+                        background: ap > 0 ? '#1e2a4a' : '#111',
+                        color: ap > 0 ? '#88bbff' : '#444',
+                        border: `1px solid ${ap > 0 ? '#3355aa' : '#222'}`,
+                        cursor: ap > 0 ? 'pointer' : 'not-allowed', fontSize: '11px'
+                    }}>
+                    ＋ 素材投入（AP {ap}→{Math.max(0, ap - 1)}）
+                </button>
+            </div>
+
+            {/* 召喚ボタン */}
+            <button onClick={handleSummon} style={{ ...btnBase, flex: '0 0 100px', background: 'linear-gradient(135deg, #2a1a5a, #4a2a8a)', color: '#ddaaff', border: '1px solid #6633bb', fontSize: '13px' }}>
+                ✨ 召喚する
+            </button>
+
+            {/* 図鑑・戦闘へ */}
+            <button
+                onClick={() => setIsBestiaryOpen(true)}
+                style={{ ...btnBase, flex: '0 0 70px', background: '#1a0f0f', color: '#cc7766', border: '1px solid #442222', fontSize: '11px' }}>
+                📖 図鑑
+            </button>
+            <button
+                onClick={() => {
+                    const finalSummons: SummonedUnit[] = [];
+                    gridRef.current.forEach((row, ri) => row?.forEach((cell, ci) => {
+                        if (cell?.isSummoned && cell.monsterType) {
+                            finalSummons.push({ id: generateId(), type: cell.monsterType, r: ri, c: ci, attackBonus: 0, hpBonus: 0 });
+                        }
+                    }));
+                    if (finalSummons.length > 0) addSummonedMonsters(finalSummons);
+                    saveRitualGrid(gridRef.current.map(row => row ? [...row] : []));
+                    setPhase('BATTLE');
+                }}
+                style={{ ...btnBase, flex: '0 0 90px', background: 'linear-gradient(135deg, #4a0a0a, #7a1a1a)', color: '#ffaaaa', border: '1px solid #882222', fontSize: '12px' }}>
+                ⚔️ 戦闘へ
+            </button>
+
+            {/* スキルボタン（仮置き） */}
+            <div style={{ flex: 1, display: 'flex', gap: '6px', alignItems: 'stretch' }}>
+                {[
+                    { label: '強化の儀', icon: '⚔️', cost: 2, desc: '自軍強化' },
+                    { label: '召喚加速', icon: '⚡', cost: 3, desc: 'コスト軽減' },
+                    { label: '霊脈解放', icon: '🌀', cost: 2, desc: '素材追加' },
+                ].map(skill => (
+                    <button key={skill.label} disabled style={{
+                        ...btnBase, flex: 1, display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center', gap: '2px',
+                        background: '#111', color: '#555', border: '1px solid #2a2a3a',
+                        cursor: 'not-allowed', opacity: 0.6, fontSize: '10px'
+                    }}>
+                        <span style={{ fontSize: '16px' }}>{skill.icon}</span>
+                        <span>{skill.label}</span>
+                        <span style={{ fontSize: '9px', color: '#447' }}>AP {skill.cost} / {skill.desc}</span>
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+
+    return (
+        <>
+            {/* ───── 盤面オーバーレイ（フラッシュ・コンボ演出） ───── */}
+            <div style={{ width: curWidth, height: '100%', position: 'relative', pointerEvents: 'none' }}>
+                <style>{`
+                    @keyframes comboAppear {
+                        0%   { opacity: 0; transform: scale(0.4); }
+                        15%  { opacity: 1; transform: scale(1.25); }
+                        30%  { transform: scale(1.0); }
+                        60%  { opacity: 1; }
+                        100% { opacity: 0; transform: scale(1.1) translateY(-30px); }
+                    }
+                    @keyframes cellFlash {
+                        0%   { opacity: 1; transform: scale(1.12); }
+                        60%  { opacity: 0.8; }
+                        100% { opacity: 0; transform: scale(1.0); }
+                    }
+                `}</style>
+
+                {/* マッチセルのフラッシュ */}
+                {flashCells.map((cell, i) => (
+                    <div key={i} style={{
+                        position: 'absolute',
+                        left: cell.c * curBlockSize,
+                        top: cell.r * curBlockSize,
+                        width: curBlockSize,
+                        height: curBlockSize,
+                        borderRadius: 8,
+                        background: `${comboColor}44`,
+                        border: `3px solid ${comboColor}`,
+                        boxShadow: `0 0 12px ${comboColor}`,
+                        pointerEvents: 'none',
+                        animation: 'cellFlash 0.4s ease-out forwards',
+                        zIndex: 50,
+                    }} />
+                ))}
+
+                {/* コンボテキスト */}
+                {comboCount >= 1 && (
+                    <div key={comboKey} style={{
+                        position: 'absolute', top: 0, left: 0, width: '100%', height: curHeight,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        pointerEvents: 'none', zIndex: 100,
+                        animation: 'comboAppear 1.4s ease-out forwards'
+                    }}>
+                        <div style={{
+                            fontSize: comboCount >= 5 ? '64px' : '48px', fontWeight: 900,
+                            color: comboColor,
+                            textShadow: `0 0 20px ${comboColor}, 0 0 40px ${comboColor}, 2px 2px 0 #000`,
+                            letterSpacing: '4px', userSelect: 'none',
+                        }}>{comboLabel}</div>
+                    </div>
+                )}
+            </div>
+
+            {/* ───── ポータル描画 ───── */}
+            {panelSlot && ReactDOM.createPortal(leftPanel, panelSlot)}
+            {bottomSlot && ReactDOM.createPortal(bottomContent, bottomSlot)}
+        </>
     );
 };
 

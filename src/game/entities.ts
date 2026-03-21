@@ -23,10 +23,10 @@ export interface EntityState {
     passiveAbilities?: PassiveAbility[];
 }
 
-export type HeroType = '村人' | '農夫' | '弓兵' | '剣士' | 'シーフ' | '魔法使い' | '重騎士' | 'プリースト' | '聖騎士' | 'パラディン' | '大魔道士' | '勇者';
+export type HeroType = '村人' | '農夫' | '弓兵' | '剣士' | '魔法使い' | '重騎士' | 'プリースト' | '聖騎士' | 'パラディン' | '大魔道士' | '勇者';
 
 export const HERO_ROSTER: HeroType[] = [
-    '村人', '農夫', '弓兵', '剣士', 'シーフ', '魔法使い', '重騎士', 'プリースト', '聖騎士', 'パラディン', '大魔道士', '勇者'
+    '村人', '農夫', '弓兵', '剣士', '魔法使い', '重騎士', 'プリースト', '聖騎士', 'パラディン', '大魔道士', '勇者'
 ];
 
 // 自軍ユニットの移動速度は一律 0.8 に設定
@@ -51,18 +51,18 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
         passiveAbilities: [{ type: 'AURA_REGEN', value: 5, range: 100 }] // 周囲100pxに毎秒5回復
     },
 
-    // --- Skeleton Derivations (Base: 中衛・中射程高DPS) ---
+    // --- Skeleton Derivations ---
     'skeleton_bone': {
-        maxHp: 300, attack: 200, range: 300, speed: DEMON_SPEED, maxCooldown: 22, color: 0xdddddd, materialType: 0
-        // 骨: 標準中衛、高DPS
+        maxHp: 300, attack: 200, range: 630, speed: DEMON_SPEED, maxCooldown: 80, color: 0xdddddd, materialType: 0
+        // 骨: 9マス射程・高火力スナイパー、攻撃頻度低め
     },
     'skeleton_meat': {
-        maxHp: 550, attack: 160, range: 270, speed: DEMON_SPEED * 0.9, maxCooldown: 18, color: 0xff9999, materialType: 1
-        // 肉: 耐久重視・連射
+        maxHp: 550, attack: 160, range: 210, speed: DEMON_SPEED * 0.9, maxCooldown: 18, color: 0xff9999, materialType: 1
+        // 肉: 3マス射程・耐久重視の近接高DPS
     },
     'skeleton_spirit': {
         maxHp: 200, attack: 100, range: 360, speed: DEMON_SPEED, maxCooldown: 30, color: 0xcc88ff, materialType: 2,
-        passiveAbilities: [{ type: 'PIERCING', value: 600 }] // 長め射程の貫通弾
+        passiveAbilities: [{ type: 'PIERCING', value: 600 }] // 5マス射程・貫通弾
     },
 
     // --- Wizard Derivations (Base: 全画面狙撃魔法) ---
@@ -102,7 +102,6 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     '農夫': { maxHp: 400, attack: 30, range: 40, speed: 1.0, maxCooldown: 60, color: 0xbbaa77 },
     '弓兵': { maxHp: 450, attack: 60, range: 180, speed: 1.2, maxCooldown: 80, color: 0xaaeeaa },
     '剣士': { maxHp: 1000, attack: 90, range: 50, speed: 1.3, maxCooldown: 55, color: 0x8888ff },
-    'シーフ': { maxHp: 500, attack: 50, range: 30, speed: 2.2, maxCooldown: 40, color: 0x444444 },
     '魔法使い': { maxHp: 550, attack: 150, range: 160, speed: 1.1, maxCooldown: 100, color: 0xee88ff },
     '重騎士': { maxHp: 2250, attack: 125, range: 55, speed: 0.9, maxCooldown: 70, color: 0x5566cc },
     'プリースト': { maxHp: 750, attack: -150, range: 150, speed: 0.9, maxCooldown: 90, color: 0xffccff },

@@ -97,7 +97,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         summonedMonsters,
         addGold, currentDay, incrementDay, setPhase, phase,
         incomingEnemies, ownedRelics, addPendingPuzzlePiece,
-        expectedSummons, fieldWidth
+        expectedSummons, fieldWidth, registerPixiApp
     } = useGame();
     const spawnUnitFnRef = useRef<((type: string) => void) | null>(null);
 
@@ -220,6 +220,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         });
         pixiContainerRef.current.appendChild(app.view as unknown as Node);
         appRef.current = app;
+        registerPixiApp(app); // 共有PIXIアプリとしてGameContextに登録
 
         const baseGraphics = new PIXI.Graphics(); app.stage.addChild(baseGraphics); baseGraphicsRef.current = baseGraphics;
         const entitiesLayer = new PIXI.Container(); app.stage.addChild(entitiesLayer); entitiesLayerRef.current = entitiesLayer;
@@ -298,9 +299,10 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             projSpritePool.current.clear();
             projTexturesRef.current.forEach(t => t.destroy());
             projTexturesRef.current.clear();
+            registerPixiApp(null); // 共有登録解除
             app.destroy(true, { children: true }); appRef.current = null;
         };
-    }, [fieldWidth]); // Add fieldWidth dependency to re-init app if it changes
+    }, [fieldWidth, registerPixiApp]); // Add fieldWidth dependency to re-init app if it changes
 
     const spawnWave = useCallback(() => {
         const s = stateRef.current;
@@ -331,25 +333,27 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             s.entities.push(entity);
         });
 
-        const bossType: HeroType = currentDay >= 5 ? '勇者' : (currentDay >= 3 ? 'パラディン' : '重騎士');
-        const bossStats = UNIT_STATS[bossType] || UNIT_STATS['剣士'];
-        const bossId = 'boss-' + generateId();
-        s.eliteIds.add(bossId);
+        // ボスは3日に1回、通常敵と同時に後方から出現
+        if (currentDay % 3 === 0) {
+            const bossType: HeroType = currentDay >= 9 ? '勇者' : (currentDay >= 6 ? 'パラディン' : '重騎士');
+            const bossStats = UNIT_STATS[bossType] || UNIT_STATS['剣士'];
+            const bossId = 'boss-' + generateId();
+            s.eliteIds.add(bossId);
 
-        const bossHp = Math.floor(bossStats.maxHp! * 5 * dayHpMult);
-        const bossEntity: EntityState = {
-            id: bossId, type: 'BOSS ' + bossType, faction: 'HERO',
-            x: fieldWidth - 100, y: FIELD_HEIGHT / 2,
-            hp: bossHp, maxHp: bossHp,
-            attack: bossStats.attack! * 2.5,
-            range: bossStats.range! + 50,
-            speed: bossStats.speed! * 0.8,
-            cooldown: 0,
-            maxCooldown: bossStats.maxCooldown!,
-            color: 0xff0000,
-        };
-        // ボスはきっかり12秒後 (720フレーム)
-        s.pendingHeroes.push({ entity: bossEntity, spawnAtFrames: s.frameCount + 720 });
+            const bossHp = Math.floor(bossStats.maxHp! * 5 * dayHpMult);
+            const bossEntity: EntityState = {
+                id: bossId, type: 'BOSS ' + bossType, faction: 'HERO',
+                x: fieldWidth - 100, y: FIELD_HEIGHT / 2,
+                hp: bossHp, maxHp: bossHp,
+                attack: bossStats.attack! * 2.5,
+                range: bossStats.range! + 50,
+                speed: bossStats.speed! * 0.8,
+                cooldown: 0,
+                maxCooldown: bossStats.maxCooldown!,
+                color: 0xff0000,
+            };
+            s.entities.push(bossEntity);
+        }
 
         setUiState(prev => ({ ...prev, wave: s.wave }));
     }, [currentDay, incomingEnemies]);
@@ -384,6 +388,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     areaMultiplier = pa.value || 1;
                 }
             });
+        }
+
+        // 非PIERCINGの通常弾もattacker.rangeを最大飛距離として設定（無限追跡防止）
+        if (!isPiercing && maxDistance === Infinity) {
+            maxDistance = attacker.range;
         }
 
         const isHeal = attacker.passiveAbilities?.some(pa => pa.type === 'HEAL_SHOT');
@@ -628,7 +637,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                             }
                         }
                     }
-                } else if (ent.type !== 'シーフ') {
+                } else {
                     // 最近の魔物（レーン無制限）
                     for (let j = 0; j < entities.length; j++) {
                         const other = entities[j];
@@ -853,7 +862,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             if (proj.targetId === 'forward') {
                 for (const t of aliveEntities) {
                     if (t.faction === 'HERO' && t.hp > 0) {
-                        if (Math.hypot(t.x - proj.x, t.y - proj.y) < proj.size + 18) {
+                        if (Math.hypot(t.x - proj.x, t.y - proj.y) < BLOCK_SIZE / 2) {
                             const attacker = proj.sourceId ? entityMap.get(proj.sourceId) : undefined;
                             applyDamage(t, proj.damage, attacker);
                             hitAnything = true;
@@ -895,7 +904,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 entities.forEach(t => {
                     if (t && t.hp > 0 && t.faction === 'HERO' && !proj.hitIds?.has(t.id)) {
                         const d = Math.hypot(t.x - proj.x, t.y - proj.y);
-                        if (d < (proj.size + 20)) { // slightly larger hit box for line attack
+                        if (d < BLOCK_SIZE / 2) {
                             const attacker = proj.sourceId ? entityMap.get(proj.sourceId) : undefined;
                             applyDamage(t, proj.damage, attacker);
                             if (proj.hitIds) proj.hitIds.add(t.id);
@@ -941,8 +950,8 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 proj.distanceTraveled = (proj.distanceTraveled || 0) + Math.hypot(stepX, stepY);
             }
 
-            // Removing Piercing projectiles if they go too far
-            if (proj.isPiercing && (proj.distanceTraveled || 0) > (proj.maxDistance || 600)) {
+            // 飛距離超過で消滅（PIERCINGも通常弾も共通）
+            if ((proj.distanceTraveled || 0) > (proj.maxDistance || Infinity)) {
                 continue;
             }
 

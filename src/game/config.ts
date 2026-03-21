@@ -6,11 +6,6 @@ export interface Recipe {
     resultMap?: Record<number, string>; // 変動スロットに入ったピース(0|1|2)に対応するユニットID
 }
 
-export interface FusionRecipe {
-    id: string;
-    name: string;
-    pattern: string[][];
-}
 
 // Colors: 0=赤(Fire), 1=青(Water), 2=緑(Earth), 3=黄(Light), 4=紫(Dark)
 
@@ -19,19 +14,6 @@ export const AP_GAUGE_MAX = 100;
 export const AP_GAUGE_PER_MATCH = 20; // 1マッチあたりのゲージ増加量（5マッチ=1AP）
 
 export const ALL_RECIPES: Recipe[] = [
-    {
-        id: 'goblin',
-        name: 'ゴブリン',
-        pattern: [
-            [9, 9, 9] // 同種3マス（どの素材でも可）
-        ],
-        reward: 0,
-        resultMap: {
-            0: 'goblin_bone',
-            1: 'goblin_meat',
-            2: 'goblin_spirit',
-        }
-    },
     {
         id: 'orc',
         name: 'オーク',
@@ -94,113 +76,6 @@ export const ALL_RECIPES: Recipe[] = [
     }
 ];
 
-export const INITIAL_RECIPES: Recipe[] = [
-    ALL_RECIPES[0], // orc
-    ALL_RECIPES[1], // skeleton
-    ALL_RECIPES[2], // wizard
-    ALL_RECIPES[3], // necromancer
-];
-export const FUSION_RECIPES: FusionRecipe[] = [
-    // ===== Tier 1: 同種配合 (5体) =====
-    {
-        id: 'hobgoblin',
-        name: 'ホブゴブリン',
-        pattern: [['goblin', 'goblin']]
-    },
-    {
-        id: 'king_slime',
-        name: 'キングスライム',
-        pattern: [['slime', 'slime']]
-    },
-    {
-        id: 'bone_warrior',
-        name: 'ボーンウォーリアー',
-        pattern: [['skeleton', 'skeleton']]
-    },
-    {
-        id: 'demolisher',
-        name: 'デモリッシャー',
-        pattern: [['bomber', 'bomber']]
-    },
-    {
-        id: 'arch_imp',
-        name: 'アーチインプ',
-        pattern: [['imp', 'imp']]
-    },
-
-    // ===== Tier 2: 異種配合 (10体) =====
-    // goblin系
-    {
-        id: 'orc_warrior',
-        name: 'オーク戦士',
-        pattern: [['goblin', 'slime']]
-    },
-    {
-        id: 'death_stalker',
-        name: 'デスストーカー',
-        pattern: [['goblin', 'skeleton']]
-    },
-    {
-        id: 'suicide_squad',
-        name: '特攻隊',
-        pattern: [['goblin', 'bomber']]
-    },
-    {
-        id: 'battle_shaman',
-        name: '戦闘シャーマン',
-        pattern: [['goblin', 'imp']]
-    },
-    // slime系
-    {
-        id: 'plague_slime',
-        name: '疫病スライム',
-        pattern: [['slime', 'skeleton']]
-    },
-    {
-        id: 'toxic_bomb',
-        name: 'トキシックボム',
-        pattern: [['slime', 'bomber']]
-    },
-    {
-        id: 'spirit_vessel',
-        name: '霊魂の器',
-        pattern: [['slime', 'imp']]
-    },
-    // skeleton系
-    {
-        id: 'cursed_knight',
-        name: '呪われた騎士',
-        pattern: [['skeleton', 'bomber']]
-    },
-    {
-        id: 'soul_archer',
-        name: 'ソウルアーチャー',
-        pattern: [['skeleton', 'imp']]
-    },
-    // bomber系
-    {
-        id: 'chaos_imp',
-        name: 'カオスインプ',
-        pattern: [['bomber', 'imp']]
-    },
-
-    // ===== Tier 3: 配合体同士 (3体) =====
-    {
-        id: 'demon_general',
-        name: '魔将軍',
-        pattern: [['hobgoblin', 'orc_warrior']]
-    },
-    {
-        id: 'death_cannon',
-        name: '死の砲台',
-        pattern: [['bone_warrior', 'plague_slime']]
-    },
-    {
-        id: 'armageddon',
-        name: 'アルマゲドン',
-        pattern: [['demolisher', 'suicide_squad']]
-    },
-];
 
 export const COLORS = [
     0xdddddd, // 0: Bone (White)
@@ -219,6 +94,22 @@ export const PIECE_EMOJIS: Record<number, string> = {
     1: '🥩',
     2: '🔮',
     9: '❓',
+};
+
+// レシピIDごとの絵文字
+export const RECIPE_EMOJIS: Record<string, string> = {
+    goblin:      '👺',
+    orc:         '👹',
+    skeleton:    '💀',
+    wizard:      '🧙',
+    necromancer: '🧟',
+};
+
+// ワイルドカード素材ごとのピース背景色 (0x形式)
+export const MATERIAL_BG_COLORS: Record<string, number> = {
+    bone:   0x2a2a3a, // 骨: 青白みかかった暗め
+    meat:   0x3a1010, // 肉: 暗い赤
+    spirit: 0x1a0a2e, // 霊: 濃い紫
 };
 
 export const ROWS = 7;
