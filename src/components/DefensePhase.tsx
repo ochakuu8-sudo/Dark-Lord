@@ -4,7 +4,7 @@ import gsap from 'gsap';
 import { PixiPlugin } from 'gsap/PixiPlugin';
 import { useGame } from '../contexts/GameContext';
 import type { EntityState } from '../game/entities';
-import { UNIT_STATS, HERO_ROSTER } from '../game/entities';
+import { UNIT_STATS, HERO_ROSTER, PASSIVE_DESCRIPTIONS } from '../game/entities';
 import type { HeroType } from '../game/entities';
 import { ROWS, BLOCK_SIZE as CFG_BLOCK_SIZE, BOARD_WIDTH, ALL_RECIPES } from '../game/config';
 
@@ -63,6 +63,7 @@ interface FloatingText {
     life: number;
     maxLife: number;
     color: number;
+    fontSize?: number;
 }
 
 function getProjectileStyle(type: string): ProjectileStyle {
@@ -97,10 +98,9 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         summonedMonsters,
         addGold, currentDay, incrementDay, setPhase, phase,
         incomingEnemies, ownedRelics, addPendingPuzzlePiece,
-        expectedSummons, fieldWidth, registerPixiApp
+        expectedSummons, fieldWidth, registerPixiApp, ritualGrid
     } = useGame();
     const spawnUnitFnRef = useRef<((type: string) => void) | null>(null);
-
     const pixiContainerRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<PIXI.Application | null>(null);
     const entitiesLayerRef = useRef<PIXI.Container | null>(null);
@@ -122,8 +122,10 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         entities: [] as EntityState[],
         pendingHeroes: [] as { entity: EntityState, spawnAtFrames: number }[],
         projectiles: [] as Projectile[],
-        particles: [] as { id: string, x: number, y: number, vx: number, vy: number, color: number, life: number }[],
+        particles: [] as { id: string, x: number, y: number, vx: number, vy: number, color: number, life: number, size?: number }[],
         floatingTexts: [] as FloatingText[],
+        aoeFlashes: [] as { id: string, x: number, y: number, radius: number, maxRadius: number, life: number, maxLife: number, color: number }[],
+        hitFlashMap: {} as Record<string, number>,
         wave: 0,
         frameCount: 0,
         nextWaveCountdown: 0,
@@ -139,14 +141,51 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     useEffect(() => { stateRef.current.currentPhase = phase; }, [phase]);
     useEffect(() => { stateRef.current.currentIncomingEnemies = incomingEnemies; }, [incomingEnemies]);
 
+    // RITUAL開始時に敵を実体スポーン（静止状態）
+    useEffect(() => {
+        if (phase !== 'RITUAL' || incomingEnemies.length === 0) return;
+        const s = stateRef.current;
+        s.entities = s.entities.filter(e => e.faction !== 'HERO');
+        s.wave = 0; s.waveInProgress = false; s.phaseEnded = false;
+        const dayHpMult = 1.0 + (currentDay - 1) * 0.4;
+        incomingEnemies.forEach(en => {
+            const stats = UNIT_STATS[en.type] || UNIT_STATS['村人'];
+            const finalHp = Math.floor(stats.maxHp! * (en.isElite ? 2 : 1) * dayHpMult);
+            s.entities.push({
+                id: en.id, type: en.type, faction: 'HERO',
+                x: BOARD_WIDTH + en.col * BLOCK_SIZE + BLOCK_SIZE / 2, y: en.row * BLOCK_SIZE + BLOCK_SIZE / 2,
+                hp: finalHp, maxHp: finalHp,
+                attack: stats.attack! * (en.isElite ? 1.8 : 1), range: stats.range!,
+                speed: stats.speed! * (en.isElite ? 1.15 : 1),
+                cooldown: Math.random() * 40, maxCooldown: stats.maxCooldown!,
+                color: en.isElite ? 0xffd700 : stats.color!,
+            });
+        });
+    }, [phase, incomingEnemies, currentDay]);
+
     const [uiState, setUiState] = useState({
         wave: 0,
         demonCount: 0, heroCount: 0, nextWaveIn: 0, killCount: 0,
     });
 
     useEffect(() => { if (onStateChange) onStateChange(uiState); }, [uiState, onStateChange]);
-    const [hoveredEntity, setHoveredEntity] = useState<EntityState | null>(null);
-    const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+    const [pinnedEntity, setPinnedEntity] = useState<EntityState | null>(null);
+    const [pinnedPos, setPinnedPos] = useState({ x: 0, y: 0 });
+    const pinnedEntityInfoRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!pinnedEntity) return;
+        const handler = (e: PointerEvent) => {
+            const target = e.target as Node;
+            const canvas = pixiContainerRef.current?.querySelector('canvas');
+            const insideCanvas = canvas && (canvas === target || canvas.contains(target));
+            const insideInfo = pinnedEntityInfoRef.current?.contains(target);
+            if (!insideCanvas && !insideInfo) setPinnedEntity(null);
+        };
+        window.addEventListener('pointerdown', handler);
+        return () => window.removeEventListener('pointerdown', handler);
+    }, [pinnedEntity]);
+
     const generateId = () => Math.random().toString(36).substr(2, 9);
 
     useEffect(() => {
@@ -160,6 +199,20 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             let hpMult = hasGiantHeart ? 2.0 : 1.0;
             let atkMult = hasFireCrown ? (stats.color === 0xff3333 ? 1.5 : 0.8) : 1.0;
 
+            // 隣接レベル計算: 上下左右の同タグ素材ピース数
+            const unitMaterialType = stats.materialType ?? -1;
+            const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+            let adjLevel = 0;
+            if (unitMaterialType >= 0) {
+                for (const [dr, dc] of dirs) {
+                    const cell = ritualGrid[unit.r + dr]?.[unit.c + dc];
+                    if (cell && !cell.isSummoned && cell.type === unitMaterialType) adjLevel++;
+                }
+            }
+            const levelMult = 1 + adjLevel * 0.15;
+            hpMult *= levelMult;
+            atkMult *= levelMult;
+
             const finalAttack = Math.floor(stats.attack! * atkMult) + (unit.attackBonus || 0);
 
             const groupX = unit.c * BLOCK_SIZE + BLOCK_SIZE / 2;
@@ -170,14 +223,16 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 x: groupX, y: groupY,
                 hp: Math.floor(stats.maxHp! * hpMult), maxHp: Math.floor(stats.maxHp! * hpMult),
                 attack: finalAttack, range: stats.range!,
-                speed: 0,
+                speed: stats.speed!,
                 cooldown: Math.random() * (stats.maxCooldown! / 2),
                 maxCooldown: stats.maxCooldown!, color: stats.color!,
                 passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined
             });
         });
 
-        stateRef.current.entities = initialEntities;
+        // 既存のHEROエンティティを保持（RITUAL中に敵が表示される必要がある）
+        const existingHeroes = stateRef.current.entities.filter(e => e.faction === 'HERO');
+        stateRef.current.entities = [...initialEntities, ...existingHeroes];
         stateRef.current.nextWaveCountdown = 30;
     }, [summonedMonsters, ownedRelics]);
 
@@ -291,6 +346,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         app.stage.eventMode = 'static';
         app.stage.hitArea = new PIXI.Rectangle(0, 0, fieldWidth, FIELD_HEIGHT);
+        app.stage.on('pointerdown', () => setPinnedEntity(null));
         app.ticker.add((delta) => { updateLogic(delta); renderGraphics(); });
 
         return () => {
@@ -306,57 +362,31 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
     const spawnWave = useCallback(() => {
         const s = stateRef.current;
-        console.log("DEBUG: spawnWave called, current incomingEnemies:", s.currentIncomingEnemies.length);
-        if (s.wave >= 1) return;
-        s.wave++;
+        if (s.waveInProgress) return;
         s.waveInProgress = true;
 
+        // 既存HEROを削除してRITUALプレスポーン分と重複しないよう再配置
+        s.entities = s.entities.filter(e => e.faction !== 'HERO');
         const dayHpMult = 1.0 + (currentDay - 1) * 0.4;
 
         s.currentIncomingEnemies.forEach(en => {
             const stats = UNIT_STATS[en.type] || UNIT_STATS['村人'];
             const isElite = en.isElite;
-            const id = en.id;
-            if (isElite) s.eliteIds.add(id);
-
+            if (isElite) s.eliteIds.add(en.id);
             const finalHp = Math.floor(stats.maxHp! * (isElite ? 2 : 1) * dayHpMult);
-            const entity: EntityState = {
-                id, type: en.type, faction: 'HERO',
-                x: BOARD_WIDTH + 250 + en.offset, y: en.lane * BLOCK_SIZE + BLOCK_SIZE / 2,
+            s.entities.push({
+                id: en.id, type: en.type, faction: 'HERO',
+                x: BOARD_WIDTH + en.col * BLOCK_SIZE + BLOCK_SIZE / 2,
+                y: en.row * BLOCK_SIZE + BLOCK_SIZE / 2,
                 hp: finalHp, maxHp: finalHp,
                 attack: stats.attack! * (isElite ? 1.8 : 1), range: stats.range!,
                 speed: stats.speed! * (isElite ? 1.15 : 1),
                 cooldown: Math.random() * 40, maxCooldown: stats.maxCooldown!,
                 color: isElite ? 0xffd700 : stats.color!,
-            };
-
-            s.entities.push(entity);
+            });
         });
 
-        // ボスは3日に1回、通常敵と同時に後方から出現
-        if (currentDay % 3 === 0) {
-            const bossType: HeroType = currentDay >= 9 ? '勇者' : (currentDay >= 6 ? 'パラディン' : '重騎士');
-            const bossStats = UNIT_STATS[bossType] || UNIT_STATS['剣士'];
-            const bossId = 'boss-' + generateId();
-            s.eliteIds.add(bossId);
-
-            const bossHp = Math.floor(bossStats.maxHp! * 5 * dayHpMult);
-            const bossEntity: EntityState = {
-                id: bossId, type: 'BOSS ' + bossType, faction: 'HERO',
-                x: fieldWidth - 100, y: FIELD_HEIGHT / 2,
-                hp: bossHp, maxHp: bossHp,
-                attack: bossStats.attack! * 2.5,
-                range: bossStats.range! + 50,
-                speed: bossStats.speed! * 0.8,
-                cooldown: 0,
-                maxCooldown: bossStats.maxCooldown!,
-                color: 0xff0000,
-            };
-            s.entities.push(bossEntity);
-        }
-
-        setUiState(prev => ({ ...prev, wave: s.wave }));
-    }, [currentDay, incomingEnemies]);
+    }, [currentDay]);
 
     // ── Spawn a projectile ────────────────
     const spawnProjectile = (attacker: EntityState, target: EntityState | 'base' | 'hero_base' | 'forward') => {
@@ -432,27 +462,9 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         if (s.currentPhase !== 'BATTLE') return;
 
-        // ── Sequential Spawning ──────────────
-        if (s.pendingHeroes.length > 0) {
-            const stillPending: typeof s.pendingHeroes = [];
-            s.pendingHeroes.forEach(p => {
-                if (s.frameCount >= p.spawnAtFrames) {
-                    s.entities.push(p.entity);
-                } else {
-                    stillPending.push(p);
-                }
-            });
-            s.pendingHeroes = stillPending;
-        }
-
-        // Wave countdown
-        if (s.wave < MAX_WAVES && s.nextWaveCountdown > 0) {
-            s.nextWaveCountdown -= delta;
-            if (s.nextWaveCountdown <= 0) {
-                console.log("DEBUG: nextWaveCountdown hit 0, spawning wave");
-                spawnWave();
-                s.nextWaveCountdown = 0;
-            }
+        // バトル開始トリガー（初回のみ）
+        if (!s.waveInProgress) {
+            spawnWave();
         }
 
 
@@ -498,8 +510,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                 }
                 targetEnt.hp -= finalDamage;
+                s.hitFlashMap[targetEnt.id] = 8;
                 const hitColor = targetEnt.faction === 'DEMON' ? 0xff4444 : 0x88ff88;
-                s.floatingTexts.push({ id: generateId(), x: targetEnt.x, y: targetEnt.y - 15, text: '-' + Math.floor(finalDamage), life: 55, maxLife: 55, color: hitColor });
+                const dmgAmt = Math.floor(finalDamage);
+                const dmgFontSize = Math.min(32, Math.max(16, 16 + Math.floor(dmgAmt / 20)));
+                s.floatingTexts.push({ id: generateId(), x: targetEnt.x + (Math.random() - 0.5) * 20, y: targetEnt.y - 20, text: '-' + dmgAmt, life: 50, maxLife: 50, color: hitColor, fontSize: dmgFontSize });
 
                 // REFLECT Ability (Bone Orc)
                 if (targetEnt.passiveAbilities && attacker && attacker.hp > 0) {
@@ -521,11 +536,12 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             const ent = entities[i];
             if (ent.hp <= 0) {
                 const isElite = s.eliteIds.has(ent.id);
-                const pCount = Math.min(16, Math.floor(ent.maxHp / 30) + 5);
+                const pCount = Math.min(24, Math.floor(ent.maxHp / 20) + 8);
                 for (let j = 0; j < pCount; j++) {
                     const a = Math.random() * Math.PI * 2;
-                    const sp = 0.5 + Math.random() * 2.5;
-                    s.particles.push({ id: generateId(), x: ent.x, y: ent.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.5, color: isElite ? 0xffdd00 : ent.color, life: 40 + Math.random() * 25 });
+                    const sp = 1.5 + Math.random() * 4.5;
+                    const size = 2 + Math.random() * 4;
+                    s.particles.push({ id: generateId(), x: ent.x, y: ent.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5, color: isElite ? 0xffdd00 : ent.color, life: 35 + Math.random() * 30, size });
                 }
                 // Bomber/Demolisher/Armageddon: AoE death explosion
                 const isBomberType = ['ボマー', 'デモリッシャー', 'アルマゲドン'].some(t => ent.type.includes(t));
@@ -616,6 +632,12 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
             if (ent.faction === 'HERO') heroCount++; else demonCount++;
 
+            // RITUAL中は敵は静止（移動・攻撃しない）
+            if (s.currentPhase === 'RITUAL' && ent.faction === 'HERO') {
+                aliveEntities.push(ent);
+                continue;
+            }
+
             let target: EntityState | null = null;
             let minDist = Infinity;
 
@@ -651,9 +673,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 const isHealer = ent.passiveAbilities?.some(pa => pa.type === 'HEAL_SHOT');
                 const isSkeleton = ent.type.includes('skeleton');
 
-                if (isSkeleton) {
-                    // スケルトン: ターゲット選択しない（常時前方発射で処理）
-                } else if (isHealer) {
+                if (isHealer) {
                     // Support Logic: Target lowest HP ally
                     let lowestHpRatio = 1.0;
                     for (let j = 0; j < entities.length; j++) {
@@ -684,60 +704,54 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
             if (ent.cooldown > 0) ent.cooldown -= delta;
 
-            // スケルトン: クールダウンごとに前方向へ射程無限発射
-            if (ent.faction === 'DEMON' && ent.type.includes('skeleton') && ent.cooldown <= 0) {
-                ent.cooldown = ent.maxCooldown;
-                spawnProjectile(ent, 'forward');
-            }
-
             const isWizardUnit = ent.type.includes('wizard');
 
             if (target) {
                 if (minDist <= ent.range) {
                     if (ent.cooldown <= 0) {
                         ent.cooldown = ent.maxCooldown;
-                        const style = getProjectileStyle(ent.type);
-                        if (style === 'sword_flash' || ent.range <= 60) {
-                            applyDamage(target, ent.attack, ent);
-                            for (let k = 0; k < 3; k++) {
+                        const instantAoe = ent.passiveAbilities?.find(pa => pa.type === 'INSTANT_AOE');
+                        if (instantAoe) {
+                            // 弾なし：敵の位置に直接範囲ダメージ
+                            const aoeRadius = instantAoe.range || 120;
+                            const aoeDamage = instantAoe.value || ent.attack;
+                            entities.forEach(other => {
+                                if (other.faction === 'HERO' && other.hp > 0) {
+                                    if (Math.hypot(other.x - target.x, other.y - target.y) <= aoeRadius) {
+                                        applyDamage(other, aoeDamage, ent);
+                                    }
+                                }
+                            });
+                            // 爆発エフェクト：AoEフラッシュ円 + パーティクル
+                            s.aoeFlashes.push({ id: generateId(), x: target.x, y: target.y, radius: 10, maxRadius: aoeRadius, life: 25, maxLife: 25, color: 0x9900ff });
+                            for (let k = 0; k < 18; k++) {
                                 const a = Math.random() * Math.PI * 2;
-                                s.particles.push({ id: generateId(), x: target.x, y: target.y, vx: Math.cos(a) * 1.5, vy: Math.sin(a) * 1.5, color: 0xffffff, life: 10 });
+                                const spd = 1.5 + Math.random() * 3;
+                                s.particles.push({ id: generateId(), x: target.x, y: target.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, color: k % 2 === 0 ? 0xcc44ff : 0xffffff, life: 30, size: 3 });
                             }
                         } else {
-                            spawnProjectile(ent, target);
+                            const style = getProjectileStyle(ent.type);
+                            if (style === 'sword_flash' || ent.range <= 60) {
+                                applyDamage(target, ent.attack, ent);
+                                for (let k = 0; k < 3; k++) {
+                                    const a = Math.random() * Math.PI * 2;
+                                    s.particles.push({ id: generateId(), x: target.x, y: target.y, vx: Math.cos(a) * 1.5, vy: Math.sin(a) * 1.5, color: 0xffffff, life: 10 });
+                                }
+                            } else {
+                                spawnProjectile(ent, target);
+                            }
                         }
                     }
-                } else if (ent.faction === 'HERO') {
-                    // 勇者: ターゲット方向へ移動
-                    let speedMult = 1.0;
-                    for (const ally of entities) {
-                        if (ally.faction === 'DEMON' && ally.hp > 0 && ally.type.includes('スライム')) {
-                            if (Math.hypot(ally.x - ent.x, ally.y - ent.y) < 90) { speedMult = 0.4; break; }
-                        }
-                    }
+                } else if (ent.faction === 'DEMON') {
                     const a = Math.atan2(target.y - ent.y, target.x - ent.x);
-                    ent.x += Math.cos(a) * ent.speed * speedMult * delta;
-                    ent.y += Math.sin(a) * ent.speed * speedMult * delta;
+                    ent.x += Math.cos(a) * ent.speed * delta;
+                    ent.y += Math.sin(a) * ent.speed * delta;
                 }
-                // 魔物は固定配置（移動しない）
-            } else if (ent.faction === 'HERO') {
-                // No target, march toward demon base
-                let speedMult = 1.0;
-                for (const ally of entities) {
-                    if (ally.faction === 'DEMON' && ally.hp > 0 && ally.type.includes('スライム')) {
-                        if (Math.hypot(ally.x - ent.x, ally.y - ent.y) < 90) { speedMult = 0.4; break; }
-                    }
-                }
-                const a = Math.atan2(DEMON_BASE.y - ent.y, DEMON_BASE.x - ent.x);
-                ent.x += Math.cos(a) * ent.speed * speedMult * delta;
-                ent.y += Math.sin(a) * ent.speed * speedMult * delta;
-
-                // 城には到達しても攻撃しない（待機）
-                if (ent.x < DEMON_BASE.x) {
-                    ent.x = DEMON_BASE.x; // 城の前で止まる
-                }
-            } else { // DEMON without target
-                // Do nothing (stationary)
+            } else if (ent.faction === 'DEMON') {
+                // ターゲットなし: 敵陣中央へ前進
+                const a = Math.atan2(FIELD_HEIGHT / 2 - ent.y, BOARD_WIDTH * 1.5 - ent.x);
+                ent.x += Math.cos(a) * ent.speed * delta;
+                ent.y += Math.sin(a) * ent.speed * delta;
             }
 
 
@@ -959,27 +973,21 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         }
         s.projectiles = aliveProjectiles;
 
-        // Wave clear → schedule next
-        if (s.waveInProgress && heroCount === 0 && s.wave < MAX_WAVES) {
-            s.waveInProgress = false;
-            s.nextWaveCountdown = 480; // 8秒に延長
-        }
-
-        // Lose condition: 味方が全滅 (heroes still active or incoming)
-        if (demonCount === 0 && (heroCount > 0 || s.pendingHeroes.length > 0 || s.wave < MAX_WAVES) && !s.phaseEnded) {
+        // Lose condition: DEMONが全滅
+        if (demonCount === 0 && heroCount > 0 && !s.phaseEnded) {
             s.phaseEnded = true;
             setTimeout(() => setPhase('RESULT'), 1500);
         }
 
-        // Win condition: No active heroes AND no pending heroes
-        if (s.wave >= MAX_WAVES && heroCount === 0 && s.pendingHeroes.length === 0 && !s.phaseEnded) {
+        // Win condition: 城が破壊された
+        const castleAlive = aliveEntities.some(e => e.type === 'ボス' && e.faction === 'HERO');
+        if (!castleAlive && s.waveInProgress && !s.phaseEnded) {
             s.phaseEnded = true;
             addGold(120 + currentDay * 80);
-            // Small delay before transition to show text
             setTimeout(() => {
                 incrementDay();
                 setPhase('PREPARATION');
-            }, 2000); // 2秒待機して余韻を持たせる
+            }, 2000);
         }
 
         // Particles
@@ -993,11 +1001,24 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         // Floating texts
         const aT = [];
         for (const t of s.floatingTexts) {
-            t.life -= delta; t.y -= 0.5 * delta;
+            t.life -= delta; t.y -= 1.2 * delta;
             if (t.life > 0) aT.push(t);
         }
-
         s.floatingTexts = aT;
+
+        // AoE flashes
+        const aF = [];
+        for (const f of s.aoeFlashes) {
+            f.life -= delta;
+            f.radius = f.maxRadius * (1 - f.life / f.maxLife);
+            if (f.life > 0) aF.push(f);
+        }
+        s.aoeFlashes = aF;
+
+        for (const id in s.hitFlashMap) {
+            s.hitFlashMap[id] -= delta;
+            if (s.hitFlashMap[id] <= 0) delete s.hitFlashMap[id];
+        }
 
         if (s.frameCount % 6 === 0) {
             // Flush pending gold
@@ -1053,7 +1074,10 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     };
 
     const renderHeroForecast = () => {
-        if (!ghostLayerRef.current || phase !== 'RITUAL') return;
+        if (!ghostLayerRef.current) return;
+        // 実体エンティティが表示されるためghost不要
+        ghostLayerRef.current.removeChildren();
+        return;
         const layer = ghostLayerRef.current;
         const pool = ghostGfxPool.current;
         const currentIds = new Set<string>();
@@ -1067,50 +1091,36 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 pool.set(id, g);
                 layer.addChild(g);
 
-                // Add a text label as a child
                 const label = new PIXI.Text(en.type, {
-                    fontSize: 14,
-                    fill: 0xffffff,
-                    fontWeight: 'bold',
-                    stroke: 0x000000,
-                    strokeThickness: 3
+                    fontSize: 14, fill: 0xffffff, fontWeight: 'bold',
+                    stroke: 0x000000, strokeThickness: 3
                 });
-                label.anchor.set(0.5, 0);
-                label.y = 20;
+                label.anchor.set(0.5, 0); label.y = 20;
                 g.addChild(label);
 
                 if (en.isElite) {
                     const eliteLabel = new PIXI.Text("ELITE", {
-                        fontSize: 10,
-                        fill: 0xffd700,
-                        fontWeight: 'bold'
+                        fontSize: 10, fill: 0xffd700, fontWeight: 'bold'
                     });
-                    eliteLabel.anchor.set(0.5, 1);
-                    eliteLabel.y = -20;
+                    eliteLabel.anchor.set(0.5, 1); eliteLabel.y = -20;
                     g.addChild(eliteLabel);
                 }
             }
             g.clear();
             const stats = UNIT_STATS[en.type] || { color: 0xcccccc };
             const color = stats.color || 0xcccccc;
-
-            // Draw a slightly larger diamond for elite
             const sz = en.isElite ? 22 : 15;
             g.beginFill(color, 0.7);
             g.lineStyle(2, en.isElite ? 0xffd700 : 0xffaa00, 0.9);
             g.drawPolygon([-sz, 0, 0, -sz, sz, 0, 0, sz]);
             g.endFill();
-
-            // Position: index * 150 + 250 on the right of BOARD_WIDTH
-            g.x = BOARD_WIDTH + 250 + en.offset;
-            g.y = en.lane * BLOCK_SIZE + BLOCK_SIZE / 2;
+            g.x = BOARD_WIDTH + en.col * BLOCK_SIZE + BLOCK_SIZE / 2;
+            g.y = en.row * BLOCK_SIZE + BLOCK_SIZE / 2;
         });
 
-        // Combined cleanup logic for forecast items
         pool.forEach((g, id) => {
             if (id.startsWith('forecast-') && !currentIds.has(id)) {
-                g.destroy();
-                pool.delete(id);
+                g.destroy(); pool.delete(id);
             }
         });
     };
@@ -1173,7 +1183,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         stateRef.current.entities.forEach(ent => {
             const isBoss = ent.id.startsWith('boss-');
-            const sz = isBoss ? 30 : (ent.faction === 'HERO' ? 15 : 18);
+            const sz = ent.type === 'ボス' ? 35 : isBoss ? 30 : (ent.faction === 'HERO' ? 15 : 18);
             const isElite = ent.faction === 'HERO' && stateRef.current.eliteIds.has(ent.id);
             let g = entityGfxPool.current.get(ent.id);
 
@@ -1185,12 +1195,23 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 // Initial persistent elements (drawn once per entity creation)
                 const outC = isElite ? 0xffd700 : ent.faction === 'HERO' ? 0xffaaaa : 0xaaffaa;
                 g.beginFill(ent.color);
-                if (ent.faction === 'HERO') g.drawRect(-sz, -sz, sz * 2, sz * 2);
-                else g.drawCircle(0, 0, sz);
+                if (ent.type === 'ボス') {
+                    // ボス: 星形っぽく大きい菱形
+                    g.drawPolygon([0, -sz, sz * 0.6, -sz * 0.6, sz, 0, sz * 0.6, sz * 0.6, 0, sz, -sz * 0.6, sz * 0.6, -sz, 0, -sz * 0.6, -sz * 0.6]);
+                } else if (ent.faction === 'HERO') {
+                    g.drawRect(-sz, -sz, sz * 2, sz * 2);
+                } else {
+                    g.drawCircle(0, 0, sz);
+                }
                 g.endFill();
-                g.lineStyle(1.5, outC, 0.8);
-                if (ent.faction === 'HERO') g.drawRect(-sz, -sz, sz * 2, sz * 2);
-                else g.drawCircle(0, 0, sz);
+                g.lineStyle(ent.type === 'ボス' ? 3 : 1.5, ent.type === 'ボス' ? 0xffff00 : outC, 0.9);
+                if (ent.type === 'ボス') {
+                    g.drawPolygon([0, -sz, sz * 0.6, -sz * 0.6, sz, 0, sz * 0.6, sz * 0.6, 0, sz, -sz * 0.6, sz * 0.6, -sz, 0, -sz * 0.6, -sz * 0.6]);
+                } else if (ent.faction === 'HERO') {
+                    g.drawRect(-sz, -sz, sz * 2, sz * 2);
+                } else {
+                    g.drawCircle(0, 0, sz);
+                }
                 g.lineStyle(0);
 
                 // HP bar container child at index 0
@@ -1198,13 +1219,10 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
                 // Interaction
                 g.eventMode = 'static'; g.cursor = 'pointer';
-                g.on('pointerover', (e: PIXI.FederatedPointerEvent) => {
-                    setHoveredEntity(ent);
-                    setTooltipPos({ x: e.client.x, y: e.client.y });
-                });
-                g.on('pointerout', () => setHoveredEntity(null));
-                g.on('pointermove', (e: PIXI.FederatedPointerEvent) => {
-                    setTooltipPos({ x: e.client.x, y: e.client.y });
+                g.on('pointerdown', (e: PIXI.FederatedPointerEvent) => {
+                    e.stopPropagation();
+                    setPinnedEntity(prev => prev?.id === ent.id ? null : ent);
+                    setPinnedPos({ x: e.global.x, y: e.global.y });
                 });
 
                 // Summon Animation
@@ -1215,6 +1233,10 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
 
             g.x = ent.x; g.y = ent.y;
+
+            // Hit flash scale
+            const flashFrames = stateRef.current.hitFlashMap[ent.id] || 0;
+            g.scale.set(flashFrames > 0 ? 1 + 0.3 * (flashFrames / 8) : 1);
 
             // Dynamic HP Bar Update
             const hpBar = g.children[0] as PIXI.Graphics;
@@ -1270,6 +1292,16 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 ab.lineStyle(2, proj.color, 0.4 + pulse); ab.drawCircle(proj.x, proj.y, range); ab.lineStyle(0);
                 ab.beginFill(0xffffff, 0.8); ab.drawCircle(proj.x, proj.y, proj.size); ab.endFill();
             });
+            // AoE flashes（即時範囲攻撃の拡大円エフェクト）
+            stateRef.current.aoeFlashes.forEach(f => {
+                const alpha = f.life / f.maxLife;
+                ab.beginFill(f.color, 0.18 * alpha);
+                ab.drawCircle(f.x, f.y, f.radius);
+                ab.endFill();
+                ab.lineStyle(3, f.color, 0.9 * alpha);
+                ab.drawCircle(f.x, f.y, f.radius);
+                ab.lineStyle(0);
+            });
         }
 
         // ── Non-area projectiles: Sprite pool (position/tint update only, no tessellation) ──
@@ -1307,7 +1339,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             pb.clear();
             stateRef.current.particles.forEach(p => {
                 pb.beginFill(p.color, Math.min(1, p.life / 30));
-                pb.drawCircle(p.x, p.y, 4); pb.endFill();
+                pb.drawCircle(p.x, p.y, p.size ?? 3); pb.endFill();
             });
         }
 
@@ -1320,7 +1352,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         stateRef.current.floatingTexts.forEach(ft => {
             let t = floatTextPool.current.get(ft.id);
             if (!t) {
-                t = new PIXI.Text(ft.text, { fontSize: 20, fill: ft.color, fontWeight: 'bold', dropShadow: true, dropShadowDistance: 1, dropShadowAlpha: 0.8 });
+                t = new PIXI.Text(ft.text, { fontSize: ft.fontSize ?? 18, fill: ft.color, fontWeight: 'bold', dropShadow: true, dropShadowDistance: 2, dropShadowAlpha: 0.9, stroke: 0x000000, strokeThickness: 3 });
                 t.anchor.set(0.5); fl.addChild(t); floatTextPool.current.set(ft.id, t);
             }
             t.alpha = ft.life / ft.maxLife;
@@ -1330,28 +1362,48 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
     return (
         <div className="defense-phase" style={{ position: 'relative', width: '100%', height: '100%', padding: 0, display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-start' }}>
-            <div className="canvas-container" ref={pixiContainerRef} style={{ cursor: 'default', border: '2px solid #330000', borderRadius: '4px', overflow: 'hidden' }} />
+            <div className="canvas-container" ref={pixiContainerRef} style={{
+                cursor: 'default', overflow: 'hidden',
+                border: '1px solid rgba(180,60,60,0.6)',
+                outline: '1px solid rgba(120,20,20,0.4)',
+                outlineOffset: '3px',
+                borderRadius: '2px',
+                boxShadow: '0 0 0 5px rgba(40,0,0,0.5), 0 0 0 6px rgba(160,40,40,0.25), 0 0 0 9px rgba(80,0,0,0.3), 0 0 20px rgba(200,20,20,0.15), inset 0 0 12px rgba(0,0,0,0.6)',
+            }} />
 
-            {hoveredEntity && (
-                <div style={{
-                    position: 'fixed', top: tooltipPos.y + 15, left: tooltipPos.x + 15,
-                    backgroundColor: 'rgba(0,0,0,0.9)', color: '#fff', padding: '10px 15px',
-                    borderRadius: '5px', pointerEvents: 'none', zIndex: 100,
-                    border: '1px solid ' + (hoveredEntity.faction === 'HERO' ? '#ff4444' : '#44ff44'),
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)', minWidth: '160px',
-                }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '6px', color: hoveredEntity.faction === 'HERO' ? '#ffaaaa' : '#aaffaa' }}>
-                        {getUnitDisplayName(hoveredEntity.type)}
-                        <span style={{ fontSize: '11px', marginLeft: '8px', color: '#888' }}>{hoveredEntity.faction === 'HERO' ? '英雄軍' : '魔王軍'}</span>
+            {pinnedEntity && (() => {
+                const isHero = pinnedEntity.faction === 'HERO';
+                const borderColor = isHero ? '#ff4444' : '#44ff44';
+                const nameColor = isHero ? '#ffaaaa' : '#aaffaa';
+                const liveEnt = stateRef.current.entities.find(e => e.id === pinnedEntity.id) ?? pinnedEntity;
+                return (
+                    <div ref={pinnedEntityInfoRef} style={{
+                            position: 'absolute', top: pinnedPos.y + 15, left: Math.max(4, pinnedPos.x - 190),
+                            backgroundColor: 'rgba(0,0,0,0.92)', color: '#fff', padding: '10px 15px',
+                            borderRadius: '6px', pointerEvents: 'auto', zIndex: 9999,
+                            border: '1px solid ' + borderColor,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.6)', minWidth: '170px',
+                        }} onPointerDown={e => e.stopPropagation()}>
+                            <div style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '6px', color: nameColor }}>
+                                {getUnitDisplayName(liveEnt.type)}
+                                <span style={{ fontSize: '11px', marginLeft: '8px', color: '#888' }}>{isHero ? '英雄軍' : '魔王軍'}</span>
+                            </div>
+                            <div style={{ fontSize: '13px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
+                                <span style={{ color: '#aaffaa' }}>HP: {Math.max(0, Math.floor(liveEnt.hp))}/{liveEnt.maxHp}</span>
+                                <span style={{ color: '#ffaaaa' }}>ATK: {Math.floor(liveEnt.attack)}</span>
+                                <span style={{ color: '#aaaaff' }}>射程: {liveEnt.range}</span>
+                                <span style={{ color: '#ffff88' }}>速度: {liveEnt.speed.toFixed(1)}</span>
+                            </div>
+                            {liveEnt.passiveAbilities && liveEnt.passiveAbilities.length > 0 && (
+                                <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #333', fontSize: '11px', color: '#cc88ff' }}>
+                                    {liveEnt.passiveAbilities.map((pa, i) => (
+                                        <div key={i}>★ {PASSIVE_DESCRIPTIONS[pa.type] ?? pa.type}</div>
+                                    ))}
+                                </div>
+                            )}
                     </div>
-                    <div style={{ fontSize: '13px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
-                        <span style={{ color: '#aaffaa' }}>HP: {Math.max(0, Math.floor(hoveredEntity.hp))}/{hoveredEntity.maxHp}</span>
-                        <span style={{ color: '#ffaaaa' }}>ATK: {hoveredEntity.attack}</span>
-                        <span style={{ color: '#aaaaff' }}>射程: {hoveredEntity.range}</span>
-                        <span style={{ color: '#ffff88' }}>速度: {hoveredEntity.speed}</span>
-                    </div>
-                </div>
-            )}
+                );
+            })()}
         </div>
     );
 };

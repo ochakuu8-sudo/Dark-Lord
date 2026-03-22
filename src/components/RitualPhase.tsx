@@ -8,7 +8,7 @@ import {
     ROWS, COLS, BLOCK_SIZE, RECIPE_EMOJIS, MATERIAL_BG_COLORS,
     type Recipe
 } from '../game/config';
-import { UNIT_STATS } from '../game/entities';
+import { UNIT_STATS, PASSIVE_DESCRIPTIONS } from '../game/entities';
 import type { SummonedUnit } from '../contexts/GameContext';
 import BestiaryModal from './BestiaryModal';
 
@@ -80,6 +80,19 @@ const RitualPhase: React.FC = () => {
     const [flashCells, setFlashCells] = useState<{ r: number; c: number }[]>([]);
     const [isDraggingSummoned, setIsDraggingSummoned] = useState(false);
     const sellZoneRef = useRef<HTMLDivElement>(null);
+    const [pinnedPiece, setPinnedPiece] = useState<{ monsterType: string; pos: { x: number; y: number } } | null>(null);
+    const pinnedPieceInfoRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!pinnedPiece) return;
+        const handler = (e: PointerEvent) => {
+            if (pinnedPieceInfoRef.current && !pinnedPieceInfoRef.current.contains(e.target as Node)) {
+                setPinnedPiece(null);
+            }
+        };
+        window.addEventListener('pointerdown', handler);
+        return () => window.removeEventListener('pointerdown', handler);
+    }, [pinnedPiece]);
 
     const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -234,6 +247,32 @@ const RitualPhase: React.FC = () => {
             nameTxt.anchor.set(0.5, 0);
             nameTxt.y = curBlockSize / 2 - 14;
             container.addChild(nameTxt);
+            // 隣接レベル表示（右下）
+            const unitMaterialType = stats?.materialType ?? -1;
+            const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+            let adjLevel = 0;
+            if (unitMaterialType >= 0) {
+                for (const [dr, dc] of dirs) {
+                    const cell = gridRef.current[block.row + dr]?.[block.col + dc];
+                    if (cell && !cell.isSummoned && cell.type === unitMaterialType) adjLevel++;
+                }
+            }
+            if (adjLevel > 0) {
+                const lvlBg = new PIXI.Graphics();
+                lvlBg.beginFill(0x000000, 0.75);
+                lvlBg.drawRoundedRect(-1, -1, 16, 16, 4);
+                lvlBg.endFill();
+                lvlBg.x = curBlockSize / 2 - 16;
+                lvlBg.y = curBlockSize / 2 - 16;
+                container.addChild(lvlBg);
+                const lvlTxt = new PIXI.Text(`+${adjLevel}`, new PIXI.TextStyle({
+                    fontSize: 11, fill: '#ffee44', fontWeight: 'bold'
+                }));
+                lvlTxt.anchor.set(0.5, 0.5);
+                lvlTxt.x = curBlockSize / 2 - 8;
+                lvlTxt.y = curBlockSize / 2 - 8;
+                container.addChild(lvlTxt);
+            }
 
             container.hitArea = new PIXI.Rectangle(-curBlockSize / 2, -curBlockSize / 2, curBlockSize, curBlockSize);
             container.eventMode = 'static'; container.cursor = 'pointer';
@@ -243,6 +282,9 @@ const RitualPhase: React.FC = () => {
                 interactionParams.current.isDragging = true;
                 const startGlobalX = event.global.x;
                 const startGlobalY = event.global.y;
+                const startClientX = event.clientX;
+                const startClientY = event.clientY;
+                let hasDragged = false;
                 const gfx = blockGraphicsMap.current.get(block.id);
                 const initX = gfx?.x ?? (block.col * curBlockSize + curBlockSize / 2);
                 const initY = gfx?.y ?? (block.row * curBlockSize + curBlockSize / 2);
@@ -256,6 +298,9 @@ const RitualPhase: React.FC = () => {
                 let rafId0: number | null = null;
                 setIsDraggingSummoned(true);
                 const onPointerMove = (e: PointerEvent) => {
+                    const dx = e.clientX - startClientX;
+                    const dy = e.clientY - startClientY;
+                    if (!hasDragged && Math.sqrt(dx * dx + dy * dy) > 6) hasDragged = true;
                     const px = (e.clientX - rect0.left) * scaleX0;
                     const py = (e.clientY - rect0.top) * scaleY0;
                     if (gfx) { gfx.x = initX + (px - startGlobalX); gfx.y = initY + (py - startGlobalY); }
@@ -271,7 +316,17 @@ const RitualPhase: React.FC = () => {
                     window.removeEventListener('pointerup', onPointerUp);
                     setIsDraggingSummoned(false);
                     if (!gfx) { interactionParams.current.isDragging = false; return; }
-                    // 売却ゾーンにドロップしたら売却
+                    if (!hasDragged) {
+                        // タップ判定: infoを表示
+                        gfx.zIndex = 0; gfx.scale.set(1);
+                        interactionParams.current.isDragging = false;
+                        setPinnedPiece(prev =>
+                            prev?.monsterType === block.monsterType ? null
+                            : { monsterType: block.monsterType!, pos: { x: startGlobalX, y: startGlobalY } }
+                        );
+                        return;
+                    }
+                    // ドラッグ判定: 通常ドロップ処理
                     const sellRect = sellZoneRef.current?.getBoundingClientRect();
                     if (sellRect && e.clientX >= sellRect.left && e.clientX <= sellRect.right && e.clientY >= sellRect.top && e.clientY <= sellRect.bottom) {
                         gfx.zIndex = 0; gfx.scale.set(1);
@@ -836,7 +891,7 @@ const RitualPhase: React.FC = () => {
             )}
 
             {/* アクティブレシピ一覧 */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 14px' }}>
+            <div className="recipes-list" style={{ flex: 1, overflowY: 'auto', padding: '8px 14px' }}>
                 <div style={{ color: '#886699', fontSize: '10px', marginBottom: '6px', letterSpacing: '1px' }}>📜 レシピ</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                     {activeRecipes.map(recipe => (
@@ -956,7 +1011,8 @@ const RitualPhase: React.FC = () => {
     return (
         <>
             {/* ───── 盤面オーバーレイ（フラッシュ・コンボ演出） ───── */}
-            <div style={{ width: curWidth, height: '100%', position: 'relative', pointerEvents: 'none' }}>
+            <div style={{ width: curWidth, height: '100%', position: 'relative', pointerEvents: 'none' }}
+                onClick={() => setPinnedPiece(null)}>
                 <style>{`
                     @keyframes comboAppear {
                         0%   { opacity: 0; transform: scale(0.4); }
@@ -1007,6 +1063,45 @@ const RitualPhase: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* ───── ユニットピース情報ポップアップ ───── */}
+            {pinnedPiece && (() => {
+                const stats = UNIT_STATS[pinnedPiece.monsterType];
+                if (!stats) return null;
+                const name = getMonsterDisplayName(pinnedPiece.monsterType);
+                const abilities = stats.passiveAbilities ?? [];
+                return (
+                    <div ref={pinnedPieceInfoRef} style={{
+                            position: 'absolute',
+                            top: pinnedPiece.pos.y + 12,
+                            left: Math.max(4, pinnedPiece.pos.x - 190),
+                            backgroundColor: 'rgba(0,0,0,0.92)',
+                            color: '#fff',
+                            padding: '10px 14px',
+                            borderRadius: '6px',
+                            border: '1px solid #aaffaa',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
+                            minWidth: '170px',
+                            zIndex: 9999,
+                            pointerEvents: 'auto',
+                        }} onPointerDown={e => e.stopPropagation()}>
+                            <div style={{ fontWeight: 'bold', fontSize: '15px', color: '#aaffaa', marginBottom: '6px' }}>{name}</div>
+                            <div style={{ fontSize: '13px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px' }}>
+                                <span style={{ color: '#aaffaa' }}>HP: {stats.maxHp}</span>
+                                <span style={{ color: '#ffaaaa' }}>ATK: {stats.attack}</span>
+                                <span style={{ color: '#aaaaff' }}>射程: {stats.range}</span>
+                                <span style={{ color: '#ffff88' }}>速度: {(stats.speed ?? 0).toFixed(1)}</span>
+                            </div>
+                            {abilities.length > 0 && (
+                                <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #333', fontSize: '11px', color: '#cc88ff' }}>
+                                    {abilities.map((pa, i) => (
+                                        <div key={i}>★ {PASSIVE_DESCRIPTIONS[pa.type] ?? pa.type}</div>
+                                    ))}
+                                </div>
+                            )}
+                    </div>
+                );
+            })()}
 
             {/* ───── ポータル描画 ───── */}
             {panelSlot && ReactDOM.createPortal(leftPanel, panelSlot)}

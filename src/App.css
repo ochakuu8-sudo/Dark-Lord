@@ -208,6 +208,26 @@ h2 {
   transform: none;
 }
 
+/* スクロールバー共通スタイル */
+.battle-scroll-container::-webkit-scrollbar,
+.recipes-list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.battle-scroll-container::-webkit-scrollbar-track,
+.recipes-list::-webkit-scrollbar-track {
+  background: #0a0812;
+}
+.battle-scroll-container::-webkit-scrollbar-thumb,
+.recipes-list::-webkit-scrollbar-thumb {
+  background: #3a1050;
+  border-radius: 5px;
+}
+.battle-scroll-container::-webkit-scrollbar-thumb:hover,
+.recipes-list::-webkit-scrollbar-thumb:hover {
+  background: #6a2090;
+}
+
 /* Defense Phase Layout */
 .defense-phase {
   display: flex;

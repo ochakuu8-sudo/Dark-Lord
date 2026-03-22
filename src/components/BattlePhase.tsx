@@ -39,21 +39,36 @@ const BattlePhase: React.FC = () => {
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
                 {/* 儀式左パネルスロット（スクロール外・自陣の左） */}
                 <div
-                    id="ritual-panel-slot"
                     style={{
-                        width: phase === 'RITUAL' ? `${LEFT_PANEL_WIDTH}px` : '0px',
+                        width: `${LEFT_PANEL_WIDTH}px`,
                         flexShrink: 0,
                         overflow: 'hidden',
                         height: '100%',
-                        transition: 'width 0.2s ease',
                         background: '#08060f',
-                        borderRight: phase === 'RITUAL' ? '2px solid #2a1040' : 'none',
+                        borderRight: '2px solid #2a1040',
+                        display: 'flex',
+                        flexDirection: 'column',
                     }}
-                />
+                >
+                    {phase === 'RITUAL'
+                        ? <div id="ritual-panel-slot" style={{ width: '100%', height: '100%' }} />
+                        : <div style={{ padding: '14px 12px', color: '#ccc', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div style={{ color: '#ff6666', fontWeight: 'bold', fontSize: '16px', borderBottom: '1px solid #2a1040', paddingBottom: '6px' }}>⚔️ 戦況</div>
+                            <div>🌊 WAVE {uiState.wave} / {MAX_WAVES}</div>
+                            <div style={{ color: '#aaffaa' }}>👿 自軍: {uiState.demonCount}</div>
+                            <div style={{ color: '#ffaaaa' }}>🗡️ 敵軍: {uiState.heroCount}</div>
+                            <div style={{ color: '#ff88ff' }}>💀 撃破: {uiState.killCount}</div>
+                            {uiState.nextWaveIn > 0 && uiState.wave < MAX_WAVES && (
+                                <div style={{ color: '#ffff44' }}>次WAVE: {uiState.nextWaveIn.toFixed(1)}s</div>
+                            )}
+                        </div>
+                    }
+                </div>
 
                 {/* 戦闘フィールド（常時描画・横スクロール可） */}
                 <div
                     ref={scrollContainerRef}
+                    className="battle-scroll-container"
                     style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', position: 'relative' }}
                 >
                     <div style={{ width: `${fieldWidth}px`, height: '100%', position: 'relative' }}>

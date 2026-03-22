@@ -73,6 +73,21 @@ export const ALL_RECIPES: Recipe[] = [
             1: 'necromancer_meat',
             2: 'necromancer_spirit',
         }
+    },
+    {
+        id: 'wisp',
+        name: 'ウィスプ',
+        pattern: [
+            [ 2, -1, -1], // 霊 .  .
+            [-1,  9, -1], //  . X  .
+            [-1, -1,  2], //  . .  霊
+        ],
+        reward: 2,
+        resultMap: {
+            0: 'wisp_bone',
+            1: 'wisp_meat',
+            2: 'wisp_spirit',
+        }
     }
 ];
 
@@ -114,8 +129,10 @@ export const MATERIAL_BG_COLORS: Record<string, number> = {
 
 export const ROWS = 7;
 export const COLS = 7;
-export const BLOCK_SIZE = 70; // 7x7盤面に合わせてブロックサイズを調整 (7x70 = 490px)
+export const ENEMY_COLS = 7; // 敵陣の列数（将来的に可変予定、デフォルト7×7）
+export const BLOCK_SIZE = 70; // 7x7盤面 (7x70 = 490px)
 export const BOARD_WIDTH = COLS * BLOCK_SIZE;
+export const ENEMY_BOARD_WIDTH = ENEMY_COLS * BLOCK_SIZE;
 export const BOARD_HEIGHT = ROWS * BLOCK_SIZE;
 export const MAX_AP = 10;
 export const AP_PER_DAY = 0; // AP is earned through summon combos only

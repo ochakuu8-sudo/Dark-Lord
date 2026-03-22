@@ -33,7 +33,7 @@ const GameController: React.FC = () => {
 function App() {
   return (
     <GameProvider>
-      <ResponsiveWrapper logicalWidth={1150} logicalHeight={700}>
+      <ResponsiveWrapper logicalWidth={1240} logicalHeight={636}>
         <GameController />
       </ResponsiveWrapper>
     </GameProvider>

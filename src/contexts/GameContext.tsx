@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState } from 'react';
-import { ALL_RECIPES, ROWS, COLS, BOARD_WIDTH, MAX_AP, AP_PER_DAY, AP_GAUGE_MAX } from '../game/config';
+import { ALL_RECIPES, ROWS, COLS, BOARD_WIDTH, ENEMY_BOARD_WIDTH, BLOCK_SIZE, MAX_AP, AP_PER_DAY, AP_GAUGE_MAX } from '../game/config';
 import type { Recipe } from '../game/config';
 
 export type GamePhase = 'TITLE' | 'PREPARATION' | 'RITUAL' | 'BATTLE' | 'RESULT';
@@ -86,7 +86,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [ownedRelics, setOwnedRelics] = useState<string[]>([]);
     const [ritualGrid, setRitualGrid] = useState<(any | null)[][]>([]);
     const [expectedSummons, setExpectedSummons] = useState<SummonedUnit[]>([]);
-    const [fieldWidth, setFieldWidth] = useState<number>(BOARD_WIDTH + 1000);
+    const [fieldWidth, setFieldWidth] = useState<number>(BOARD_WIDTH + ENEMY_BOARD_WIDTH);
     const [incomingEnemies, setIncomingEnemies] = useState<any[]>([]);
 
     const [pendingPuzzlePieces, setPendingPuzzlePieces] = useState<number[]>([]);
@@ -202,25 +202,55 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, []);
 
     const generateWave = React.useCallback((day: number) => {
+        // 敵陣列(col): 0=最前衛(左/自陣に近い), 6=最後衛
+        const FORMATION: Record<string, number> = {
+            '重騎士': 0, 'パラディン': 0, '剣士': 1,
+            '村人': 1, '農夫': 2,
+            '弓兵': 4, '魔法使い': 5, '大魔道士': 6,
+        };
+
         const enemies = [];
-        const count = 3 + day * 2;
-        const types: HeroType[] = ['村人', '農夫', '弓兵'];
+        const count = 6 + day * 3;
+
+        const usedPosByCol = new Map<number, Set<number>>();
+        const tankTypes: HeroType[] = day >= 3 ? ['剣士', '重騎士'] : ['村人', '農夫'];
+        const rangedTypes: HeroType[] = day >= 3 ? ['弓兵', '魔法使い'] : day >= 2 ? ['弓兵'] : [];
+
         for (let i = 0; i < count; i++) {
-            const type = types[Math.floor(Math.random() * types.length)];
-            enemies.push({ 
-                id: `e-${day}-${i}`, 
-                type: type, 
-                lane: Math.floor(Math.random() * ROWS), // 0-6
-                offset: i * 80 + Math.random() * 40,
+            const isTank = rangedTypes.length === 0 || i < Math.ceil(count * 2 / 3);
+            const type = isTank
+                ? tankTypes[Math.floor(Math.random() * tankTypes.length)]
+                : rangedTypes[Math.floor(Math.random() * rangedTypes.length)];
+            const col = FORMATION[type] ?? 4;
+            if (!usedPosByCol.has(col)) usedPosByCol.set(col, new Set());
+            const used = usedPosByCol.get(col)!;
+            const available = Array.from({length: ROWS}, (_, k) => k).filter(k => !used.has(k));
+            const row = available.length > 0
+                ? available[Math.floor(Math.random() * available.length)]
+                : Math.floor(Math.random() * ROWS);
+            used.add(row);
+            enemies.push({
+                id: `e-${day}-${i}`,
+                type,
+                row,
+                col,
                 isElite: Math.random() < 0.1
             });
         }
+        // ボスを最後列中央に固定配置
+        enemies.push({
+            id: `boss-${day}`,
+            type: 'ボス',
+            row: 3,
+            col: 6,
+            isElite: false,
+        });
         setIncomingEnemies(enemies);
     }, []);
 
     const dropMaterials = React.useCallback((day: number) => {
         const colors = [0, 1, 2];
-        const count = 5 + day;
+        const count = 38 + day * 2;
         for (let i = 0; i < count; i++) {
             const color = colors[Math.floor(Math.random() * colors.length)];
             addPendingPuzzlePiece(color);

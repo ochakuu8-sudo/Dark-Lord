@@ -1,5 +1,5 @@
 export interface PassiveAbility {
-    type: 'REFLECT' | 'AURA_REGEN' | 'PIERCING' | 'PIECE_RETURN' | 'CLONE' | 'AREA_DOT' | 'ATK_BUFF' | 'HEAL_SHOT' | 'SUMMON' | 'CORPSE_EXPLOSION';
+    type: 'REFLECT' | 'AURA_REGEN' | 'PIERCING' | 'PIECE_RETURN' | 'CLONE' | 'AREA_DOT' | 'ATK_BUFF' | 'HEAL_SHOT' | 'SUMMON' | 'CORPSE_EXPLOSION' | 'PROXIMITY_EXPLOSION' | 'INSTANT_AOE';
     value?: number;
     range?: number;
     cooldown?: number;
@@ -75,8 +75,8 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
         passiveAbilities: [{ type: 'HEAL_SHOT' }] // 全画面から味方を回復
     },
     'wizard_spirit': {
-        maxHp: 300, attack: 80, range: 900, speed: DEMON_SPEED * 0.5, maxCooldown: 120, color: 0x9900ff, materialType: 2,
-        passiveAbilities: [{ type: 'AREA_DOT', value: 0.3, range: 80 }] // 遠距離から範囲DoT
+        maxHp: 300, attack: 80, range: 350, speed: DEMON_SPEED * 0.5, maxCooldown: 120, color: 0x9900ff, materialType: 2,
+        passiveAbilities: [{ type: 'INSTANT_AOE', value: 80, range: 120 }] // 射程内の敵位置に直接範囲ダメージ
     },
 
     // --- Necromancer Derivations (Base: Token/Death) ---
@@ -93,22 +93,37 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
         passiveAbilities: [{ type: 'CORPSE_EXPLOSION', value: 1.5, range: 150 }] // 攻撃力100 * 1.5 = 150ダメ (5倍)
     },
 
+    // ウィスプ（ワイルド未決定のためXバリアントはTBD）
+    'wisp_bone': {
+        maxHp: 250, attack: 300, range: 80, speed: DEMON_SPEED * 1.3, maxCooldown: 60, color: 0xeeeeff, materialType: 0,
+        passiveAbilities: [{ type: 'PROXIMITY_EXPLOSION', value: 300, range: 80 }]
+    },
+    'wisp_meat': {
+        maxHp: 450, attack: 400, range: 80, speed: DEMON_SPEED * 1.1, maxCooldown: 60, color: 0xff9999, materialType: 1,
+        passiveAbilities: [{ type: 'PROXIMITY_EXPLOSION', value: 400, range: 80 }]
+    },
+    'wisp_spirit': {
+        maxHp: 200, attack: 250, range: 100, speed: DEMON_SPEED * 1.5, maxCooldown: 60, color: 0xcc88ff, materialType: 2,
+        passiveAbilities: [{ type: 'PROXIMITY_EXPLOSION', value: 250, range: 100 }]
+    },
+
     // --- Token Units ---
     'zombie': {
         maxHp: 250, attack: 125, range: 45, speed: DEMON_SPEED * 0.6, maxCooldown: 150, color: 0x446644, materialType: 1
     },
     // ===== 英雄軍（敵）=====
-    '村人': { maxHp: 300, attack: 20, range: 40, speed: 1.1, maxCooldown: 70, color: 0xddddbb },
-    '農夫': { maxHp: 400, attack: 30, range: 40, speed: 1.0, maxCooldown: 60, color: 0xbbaa77 },
-    '弓兵': { maxHp: 450, attack: 60, range: 180, speed: 1.2, maxCooldown: 80, color: 0xaaeeaa },
-    '剣士': { maxHp: 1000, attack: 90, range: 50, speed: 1.3, maxCooldown: 55, color: 0x8888ff },
-    '魔法使い': { maxHp: 550, attack: 150, range: 160, speed: 1.1, maxCooldown: 100, color: 0xee88ff },
-    '重騎士': { maxHp: 2250, attack: 125, range: 55, speed: 0.9, maxCooldown: 70, color: 0x5566cc },
+    '村人': { maxHp: 900, attack: 20, range: 40, speed: 1.1, maxCooldown: 70, color: 0xddddbb },
+    '農夫': { maxHp: 1200, attack: 30, range: 40, speed: 1.0, maxCooldown: 60, color: 0xbbaa77 },
+    '弓兵': { maxHp: 450, attack: 60, range: 400, speed: 1.2, maxCooldown: 80, color: 0xaaeeaa },
+    '剣士': { maxHp: 2500, attack: 90, range: 50, speed: 1.3, maxCooldown: 55, color: 0x8888ff },
+    '魔法使い': { maxHp: 550, attack: 150, range: 400, speed: 1.1, maxCooldown: 100, color: 0xee88ff },
+    '重騎士': { maxHp: 5000, attack: 125, range: 55, speed: 0.9, maxCooldown: 70, color: 0x5566cc },
     'プリースト': { maxHp: 750, attack: -150, range: 150, speed: 0.9, maxCooldown: 90, color: 0xffccff },
     '聖騎士': { maxHp: 4000, attack: 200, range: 60, speed: 0.9, maxCooldown: 65, color: 0xffffff },
     'パラディン': { maxHp: 6000, attack: 100, range: 55, speed: 0.7, maxCooldown: 80, color: 0xffdd44 },
-    '大魔道士': { maxHp: 1500, attack: 275, range: 200, speed: 0.9, maxCooldown: 100, color: 0xcc44ff },
+    '大魔道士': { maxHp: 1500, attack: 275, range: 400, speed: 0.9, maxCooldown: 100, color: 0xcc44ff },
     '勇者': { maxHp: 25000, attack: 325, range: 65, speed: 1.2, maxCooldown: 50, color: 0xff2222 },
+    'ボス': { maxHp: 2500, attack: 100, range: 9999, speed: 0, maxCooldown: 60, color: 0xff4400 },
 };
 
 export const PASSIVE_DESCRIPTIONS: Record<string, string> = {
@@ -122,4 +137,6 @@ export const PASSIVE_DESCRIPTIONS: Record<string, string> = {
     'HEAL_SHOT': '最も傷ついた味方を魔法で癒やす。',
     'SUMMON': '一定時間ごとにゾンビを召喚し続ける。',
     'CORPSE_EXPLOSION': '近くの味方の死を糧に爆発を引き起こす。',
+    'PROXIMITY_EXPLOSION': '敵が一定距離まで近づくと自爆し、周囲に大ダメージを与える。',
+    'INSTANT_AOE': '弾を放たず、敵の位置に直接範囲魔法を発動する。',
 };

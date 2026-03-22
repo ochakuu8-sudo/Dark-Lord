@@ -149,7 +149,7 @@ const ResponsiveWrapper: React.FC<ResponsiveWrapperProps> = ({
         onClick={toggleFullscreen}
         style={{
           position: 'absolute',
-          top: '10px',
+          bottom: '10px',
           right: '10px',
           zIndex: 9999,
           background: 'rgba(50, 50, 50, 0.5)',
