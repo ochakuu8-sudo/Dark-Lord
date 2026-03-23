@@ -4,9 +4,9 @@ import * as PIXI from 'pixi.js';
 import gsap from 'gsap';
 import { useGame } from '../contexts/GameContext';
 import {
-    COLORS, PIECE_EMOJIS, ALL_RECIPES, AP_GAUGE_MAX, AP_GAUGE_PER_MATCH,
-    ROWS, COLS, BLOCK_SIZE, RECIPE_EMOJIS, MATERIAL_BG_COLORS,
-    type Recipe
+    COLORS, PIECE_EMOJIS, ALL_RECIPES,
+    ROWS, COLS, BLOCK_SIZE, RECIPE_EMOJIS, MATERIAL_BG_COLORS, COLOR_HEX,
+    RELICS, type Recipe, type Relic
 } from '../game/config';
 import { UNIT_STATS, PASSIVE_DESCRIPTIONS } from '../game/entities';
 import type { SummonedUnit } from '../contexts/GameContext';
@@ -41,11 +41,35 @@ const RitualPhase: React.FC = () => {
         ritualGrid: storedGrid, saveRitualGrid,
         setExpectedSummons,
         expectedSummons,
-        ap, spendAp,
-        apGauge, addApGauge,
         fieldWidth,
-        pixiAppRef, pixiAppVersion
+        pixiAppRef, pixiAppVersion,
+        generateWave,
+        equippedRecipes, addEquippedRecipe,
+        ownedRelics, addRelic,
+        money, addMoney, spendMoney,
     } = useGame();
+
+    // レシピ選択オーバーレイ状態
+    const [offeredRecipes, setOfferedRecipes] = useState<Recipe[]>([]);
+    const [pickedRecipeId, setPickedRecipeId] = useState<string | null>(null);
+    const [showRecipeSelect, setShowRecipeSelect] = useState(false);
+    const [offeredRelics, setOfferedRelics] = useState<Relic[]>([]);
+
+    // Day開始時: wave生成・レシピ選択オーバーレイ表示（Day2以降のみ）
+    useEffect(() => {
+        generateWave(currentDay);
+        setPickedRecipeId(null);
+        // レリックショップ更新（毎日3種ランダム）
+        const unowned = RELICS.filter(r => !ownedRelics.includes(r.id));
+        setOfferedRelics([...unowned].sort(() => 0.5 - Math.random()).slice(0, 3));
+        if (currentDay === 1) {
+            setShowRecipeSelect(false);
+        } else {
+            const unequipped = ALL_RECIPES.filter(r => !equippedRecipes.includes(r.id));
+            setOfferedRecipes([...unequipped].sort(() => 0.5 - Math.random()).slice(0, 3));
+            setShowRecipeSelect(true);
+        }
+    }, [currentDay]);
 
     const curRows = ROWS;
     const curCols = COLS;
@@ -336,7 +360,7 @@ const RitualPhase: React.FC = () => {
                         gridRef.current = ng;
                         setGrid([...ng.map(r => [...r])]);
                         saveRitualGrid(ng);
-                        addApGauge(AP_GAUGE_MAX);
+                        addMoney(10);
                         return;
                     }
                     const tr = Math.floor(gfx.y / curBlockSize);
@@ -664,44 +688,16 @@ const RitualPhase: React.FC = () => {
         return { used, matchedCells: newMatchedCells, summons, recipeIds, matchGroups };
     }, [curRows, curCols, generateId, setExpectedSummons]);
 
-    const handleDropMaterial = useCallback(() => {
-        if (!spendAp(1)) return;
-        const pool = blockPool.current;
-        const drawOne = () => pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : Math.floor(Math.random() * 3);
-        const t0 = drawOne();
-        const t1 = drawOne();
-        const ng = gridRef.current.map(row => row ? [...row] : Array(curCols).fill(null));
-        const candidates: { r0: number; c0: number; r1: number; c1: number }[] = [];
-        for (let r = 0; r < curRows; r++) {
-            for (let c = 0; c < curCols; c++) {
-                if (!ng[r][c]) {
-                    if (c + 1 < curCols && !ng[r][c + 1]) candidates.push({ r0: r, c0: c, r1: r, c1: c + 1 });
-                    if (r + 1 < curRows && !ng[r + 1][c]) candidates.push({ r0: r, c0: c, r1: r + 1, c1: c });
-                }
-            }
-        }
-        if (candidates.length === 0) return;
-        const choice = candidates[Math.floor(Math.random() * candidates.length)];
-        const groupId = `g-${generateId()}`;
-        const id0 = generateId();
-        const id1 = generateId();
-        newlyPlacedIds.current.add(id0);
-        newlyPlacedIds.current.add(id1);
-        ng[choice.r0][choice.c0] = { id: id0, type: t0, row: choice.r0, col: choice.c0, groupId, dropDelay: 0 };
-        ng[choice.r1][choice.c1] = { id: id1, type: t1, row: choice.r1, col: choice.c1, groupId, dropDelay: 0.05 };
-        gridRef.current = ng;
-        setGrid([...ng.map(r => [...r])]);
-    }, [spendAp, curRows, curCols, generateId]);
-
-    const handleSummon = useCallback(() => {
+    // 召喚処理（コンボ演出のみ。素材は消費しない）
+    const handleSummon = useCallback((onComplete?: (summons: SummonedUnit[]) => void) => {
         const result = findMatches();
-        if (!result) return;
-        const { used, summons, matchGroups } = result;
-        if (summons.length === 0) return;
+        if (!result) { onComplete?.([]); return; }
+        const { summons, matchGroups } = result;
+        if (summons.length === 0) { onComplete?.([]); return; }
 
         setHasSummoned(true);
 
-        // 1召喚ごとに順番にコンボ演出・AP加算
+        // 1召喚ごとにコンボ演出
         const STEP_MS = 450;
         matchGroups.forEach((cells, i) => {
             setTimeout(() => {
@@ -709,37 +705,17 @@ const RitualPhase: React.FC = () => {
                 setComboCount(i + 1);
                 setComboKey(k => k + 1);
                 playComboSound(i + 1);
-                addApGauge(AP_GAUGE_PER_MATCH);
                 setTimeout(() => setFlashCells([]), 380);
             }, i * STEP_MS);
         });
 
-        // 全演出終了後に素材消費→モンスター配置
+        // 全演出終了後にコールバック（素材はそのまま、グリッド変更なし）
         const totalAnimMs = (matchGroups.length - 1) * STEP_MS + 420;
         setTimeout(() => {
-            const ng = gridRef.current.map((row, ri) =>
-                row ? row.map((cell, ci) => (cell && used[ri][ci] ? null : cell)) : Array(curCols).fill(null)
-            );
-            summons.forEach(unit => {
-                const place = (r: number, c: number) => {
-                    if (ng[r] && ng[r][c] === null) {
-                        ng[r][c] = { id: generateId(), type: -1, row: r, col: c, isSummoned: true, monsterType: unit.type };
-                        return true;
-                    }
-                    return false;
-                };
-                if (!place(unit.r, unit.c)) {
-                    for (let r = 0; r < curRows; r++)
-                        for (let c = 0; c < curCols; c++)
-                            if (place(r, c)) return;
-                }
-            });
-            gridRef.current = ng;
-            setGrid([...ng.map(r => [...r])]);
-            saveRitualGrid(ng);
             setTimeout(() => setComboCount(0), 1400);
+            onComplete?.(summons);
         }, totalAnimMs);
-    }, [findMatches, curRows, curCols, generateId, saveRitualGrid, addApGauge, playComboSound]);
+    }, [findMatches, saveRitualGrid, playComboSound]);
 
     useEffect(() => {
         activeRecipesRef.current = activeRecipes;
@@ -749,48 +725,72 @@ const RitualPhase: React.FC = () => {
         if (gridInitialized.current) return;
         gridInitialized.current = true;
 
+        // グリッドを復元（ピース落下はレシピ選択後に行う）
         let targetGrid: (any | null)[][] = [];
         if (storedGrid && storedGrid.length > 0) {
             targetGrid = storedGrid.map(row => row ? [...row] : []);
         } else {
             targetGrid = Array(curRows).fill(null).map(() => Array(curCols).fill(null));
         }
+        gridRef.current = targetGrid;
+    }, [activeRecipes, storedGrid, curRows, curCols, currentDay]);
 
-        if (currentDay <= 1) {
-            // Day 1: 10ツモ（20ピース）を盤面に配置してスタート（落下アニメーション付き）
-            const pool = blockPool.current;
-            const rnd = () => Math.random().toString(36).substr(2, 9);
-            const drawOne = () => pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : Math.floor(Math.random() * 3);
-            for (let i = 0; i < 10; i++) {
-                const t0 = drawOne();
-                const t1 = drawOne();
-                const candidates: { r0: number; c0: number; r1: number; c1: number }[] = [];
-                for (let r = 0; r < curRows; r++) {
-                    for (let c = 0; c < curCols; c++) {
-                        if (!targetGrid[r][c]) {
-                            if (c + 1 < curCols && !targetGrid[r][c + 1]) candidates.push({ r0: r, c0: c, r1: r, c1: c + 1 });
-                            if (r + 1 < curRows && !targetGrid[r + 1][c]) candidates.push({ r0: r, c0: c, r1: r + 1, c1: c });
-                        }
+    // レシピ選択後にピース落下（選択レシピのblockPoolが確定してから）
+    const piecesDroppedThisDay = useRef(false);
+
+    useEffect(() => {
+        piecesDroppedThisDay.current = false;
+    }, [currentDay]);
+
+    const dropNewPieces = useCallback((drawCount: number) => {
+        const pool = blockPool.current;
+        const rnd = () => Math.random().toString(36).substr(2, 9);
+        const drawOne = () => pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : Math.floor(Math.random() * 3);
+        const targetGrid = gridRef.current.map(row => row ? [...row] : Array(curCols).fill(null));
+        for (let i = 0; i < drawCount; i++) {
+            const t0 = drawOne(); const t1 = drawOne();
+            const candidates: { r0: number; c0: number; r1: number; c1: number }[] = [];
+            for (let r = 0; r < curRows; r++) {
+                for (let c = 0; c < curCols; c++) {
+                    if (!targetGrid[r][c]) {
+                        if (c + 1 < curCols && !targetGrid[r][c + 1]) candidates.push({ r0: r, c0: c, r1: r, c1: c + 1 });
+                        if (r + 1 < curRows && !targetGrid[r + 1][c]) candidates.push({ r0: r, c0: c, r1: r + 1, c1: c });
                     }
                 }
-                if (candidates.length === 0) break;
-                const choice = candidates[Math.floor(Math.random() * candidates.length)];
-                const groupId = `g-${rnd()}`;
-                const id0 = rnd(); const id1 = rnd();
-                const delay = i * 0.07;
-                newlyPlacedIds.current.add(id0);
-                newlyPlacedIds.current.add(id1);
-                targetGrid[choice.r0][choice.c0] = { id: id0, type: t0, row: choice.r0, col: choice.c0, groupId, dropDelay: delay };
-                targetGrid[choice.r1][choice.c1] = { id: id1, type: t1, row: choice.r1, col: choice.c1, groupId, dropDelay: delay + 0.035 };
             }
-        } else {
-            // Day 2+: 盤面はそのまま引き継ぎ、APを配布
-            addApGauge(AP_GAUGE_MAX);
+            if (candidates.length === 0) break;
+            const choice = candidates[Math.floor(Math.random() * candidates.length)];
+            const groupId = `g-${rnd()}`;
+            const id0 = rnd(); const id1 = rnd();
+            const delay = i * 0.07;
+            newlyPlacedIds.current.add(id0);
+            newlyPlacedIds.current.add(id1);
+            targetGrid[choice.r0][choice.c0] = { id: id0, type: t0, row: choice.r0, col: choice.c0, groupId, dropDelay: delay };
+            targetGrid[choice.r1][choice.c1] = { id: id1, type: t1, row: choice.r1, col: choice.c1, groupId, dropDelay: delay + 0.035 };
         }
-
         gridRef.current = targetGrid;
+        setGrid([...targetGrid.map(r => [...r])]);
         saveRitualGrid(targetGrid);
-    }, [activeRecipes, storedGrid, curRows, curCols, saveRitualGrid, currentDay, addApGauge]);
+    }, [curRows, curCols, saveRitualGrid]);
+
+    // Day1: 初期レシピ装備済みなのでblockPool確定後に自動落下
+    useEffect(() => {
+        if (currentDay !== 1) return;
+        if (piecesDroppedThisDay.current) return;
+        if (activeRecipes.length === 0) return;
+        piecesDroppedThisDay.current = true;
+        dropNewPieces(15); // Day1=15ツモ(30p)
+    }, [currentDay, activeRecipes, dropNewPieces]);
+
+    // Day2以降: レシピ選択後にドロップ
+    useEffect(() => {
+        if (currentDay === 1) return;
+        if (pickedRecipeId === null) return;
+        if (piecesDroppedThisDay.current) return;
+        if (!activeRecipes.find(r => r.id === pickedRecipeId)) return;
+        piecesDroppedThisDay.current = true;
+        dropNewPieces(2); // Day2+=2ツモ(4p)
+    }, [pickedRecipeId, activeRecipes, currentDay, dropNewPieces]);
 
     useEffect(() => {
         // DefensePhaseが所有する共有PIXIアプリを使う（自前アプリは作らない）
@@ -859,6 +859,7 @@ const RitualPhase: React.FC = () => {
 
     const panelSlot = document.getElementById('ritual-panel-slot');
     const bottomSlot = document.getElementById('ritual-bottom-slot');
+    const panelBottomSlot = document.getElementById('ritual-panel-bottom-slot');
 
     // ───── 左パネル：レシピ・図鑑・戦闘へ ─────
     const leftPanel = (
@@ -873,6 +874,9 @@ const RitualPhase: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#cc88ff', fontWeight: 'bold', fontSize: '14px', letterSpacing: '2px' }}>☽ 召喚儀式</span>
                     <span style={{ color: '#886699', fontSize: '11px' }}>Day {currentDay}</span>
+                </div>
+                <div style={{ marginTop: '6px', color: '#ffd700', fontSize: '13px', fontWeight: 'bold' }}>
+                    💰 {money} G
                 </div>
             </div>
 
@@ -890,126 +894,219 @@ const RitualPhase: React.FC = () => {
                 </div>
             )}
 
-            {/* アクティブレシピ一覧 */}
-            <div className="recipes-list" style={{ flex: 1, overflowY: 'auto', padding: '8px 14px' }}>
-                <div style={{ color: '#886699', fontSize: '10px', marginBottom: '6px', letterSpacing: '1px' }}>📜 レシピ</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                    {activeRecipes.map(recipe => (
-                        <div key={recipe.id} style={{
-                            background: '#100c1c', border: '1px solid #2a1a3a',
-                            borderRadius: '6px', padding: '5px 8px',
-                            display: 'flex', alignItems: 'center', gap: '6px'
-                        }}>
-                            <PatternPreview pattern={recipe.pattern} />
-                            <div style={{ color: '#888', fontSize: '11px' }}>→</div>
-                            <div style={{ fontSize: '10px', color: '#ccbbdd', lineHeight: 1.3 }}>
-                                <div style={{ fontWeight: 'bold' }}>{recipe.name}</div>
-                                <div style={{ color: '#665577', fontSize: '9px' }}>? = ワイルドカード</div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* 売却ゾーン */}
-            <div ref={sellZoneRef} style={{
-                flexShrink: 0, margin: '8px 10px', padding: '10px',
-                border: `2px dashed ${isDraggingSummoned ? '#ff8844' : '#3a2030'}`,
-                borderRadius: '8px',
-                background: isDraggingSummoned ? 'rgba(255,80,20,0.12)' : 'rgba(20,10,15,0.6)',
-                textAlign: 'center', transition: 'all 0.15s',
-                pointerEvents: 'none',
-            }}>
-                <div style={{ fontSize: '18px', lineHeight: 1 }}>💰</div>
-                <div style={{ color: isDraggingSummoned ? '#ff8844' : '#553344', fontSize: '10px', marginTop: '3px' }}>
-                    {isDraggingSummoned ? 'ここで売却 +1AP' : '売却 (+1AP)'}
-                </div>
-            </div>
-
         </div>
         {isBestiaryOpen && <BestiaryModal isOpen={isBestiaryOpen} onClose={() => setIsBestiaryOpen(false)} />}
         </>
     );
 
-    // ───── 下アクションバー：AP・召喚・スキル ─────
-    const bottomContent = (
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'stretch', padding: '8px 12px', gap: '10px', boxSizing: 'border-box' }}>
-            {/* AP・素材投入 */}
-            <div style={{ flex: '0 0 180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '4px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#aaddff', fontSize: '11px', fontWeight: 'bold' }}>⚡ AP</span>
-                    <span style={{ color: '#aaddff', fontSize: '16px', fontWeight: 'bold' }}>{ap}</span>
+    // ───── 左パネル下部（売却ゾーン＋戦闘へ） ─────
+    const panelBottomContent = (
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', padding: '6px 8px', gap: '6px' }}>
+            {/* 売却ゾーン */}
+            <div ref={sellZoneRef} style={{
+                flex: 1, padding: '6px',
+                border: `2px dashed ${isDraggingSummoned ? '#ff8844' : '#3a2030'}`,
+                borderRadius: '8px',
+                background: isDraggingSummoned ? 'rgba(255,80,20,0.12)' : 'rgba(20,10,15,0.6)',
+                textAlign: 'center', transition: 'all 0.15s',
+                pointerEvents: 'none',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            }}>
+                <div style={{ fontSize: '16px', lineHeight: 1 }}>💰</div>
+                <div style={{ color: isDraggingSummoned ? '#ff8844' : '#553344', fontSize: '9px', marginTop: '2px' }}>
+                    {isDraggingSummoned ? '売却 +10G' : '売却ゾーン'}
                 </div>
-                <div style={{ position: 'relative', height: '10px', background: '#0d0d20', borderRadius: '5px', overflow: 'hidden', border: '1px solid #223' }}>
-                    <div style={{ width: `${(apGauge / AP_GAUGE_MAX) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #2244bb, #66aaff)', borderRadius: '5px', transition: 'width 0.3s ease' }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#445', fontSize: '9px' }}>コンボでゲージ増加</span>
-                    <span style={{ color: '#446', fontSize: '9px' }}>{apGauge}/{AP_GAUGE_MAX}</span>
-                </div>
-                <button
-                    onClick={handleDropMaterial} disabled={ap === 0}
-                    style={{ ...btnBase, height: '28px', marginTop: '2px',
-                        background: ap > 0 ? '#1e2a4a' : '#111',
-                        color: ap > 0 ? '#88bbff' : '#444',
-                        border: `1px solid ${ap > 0 ? '#3355aa' : '#222'}`,
-                        cursor: ap > 0 ? 'pointer' : 'not-allowed', fontSize: '11px'
-                    }}>
-                    ＋ 素材投入（AP {ap}→{Math.max(0, ap - 1)}）
-                </button>
             </div>
-
-            {/* 召喚ボタン */}
-            <button onClick={handleSummon} style={{ ...btnBase, flex: '0 0 100px', background: 'linear-gradient(135deg, #2a1a5a, #4a2a8a)', color: '#ddaaff', border: '1px solid #6633bb', fontSize: '13px' }}>
-                ✨ 召喚する
-            </button>
-
-            {/* 図鑑・戦闘へ */}
+            {/* 戦闘へ */}
             <button
-                onClick={() => setIsBestiaryOpen(true)}
-                style={{ ...btnBase, flex: '0 0 70px', background: '#1a0f0f', color: '#cc7766', border: '1px solid #442222', fontSize: '11px' }}>
-                📖 図鑑
-            </button>
-            <button
+                disabled={showRecipeSelect}
                 onClick={() => {
-                    const finalSummons: SummonedUnit[] = [];
-                    gridRef.current.forEach((row, ri) => row?.forEach((cell, ci) => {
-                        if (cell?.isSummoned && cell.monsterType) {
-                            finalSummons.push({ id: generateId(), type: cell.monsterType, r: ri, c: ci, attackBonus: 0, hpBonus: 0 });
-                        }
-                    }));
-                    if (finalSummons.length > 0) addSummonedMonsters(finalSummons);
-                    saveRitualGrid(gridRef.current.map(row => row ? [...row] : []));
-                    setPhase('BATTLE');
+                    handleSummon((summons) => {
+                        if (summons.length > 0) addSummonedMonsters(summons);
+                        saveRitualGrid(gridRef.current.map(row => row ? [...row] : []));
+                        setPhase('BATTLE');
+                    });
                 }}
-                style={{ ...btnBase, flex: '0 0 90px', background: 'linear-gradient(135deg, #4a0a0a, #7a1a1a)', color: '#ffaaaa', border: '1px solid #882222', fontSize: '12px' }}>
+                style={{ flexShrink: 0, padding: '10px', background: 'linear-gradient(135deg, #4a0a0a, #7a1a1a)', color: '#ffaaaa', border: '1px solid #882222', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: showRecipeSelect ? 'not-allowed' : 'pointer', opacity: showRecipeSelect ? 0.5 : 1 }}>
                 ⚔️ 戦闘へ
             </button>
+        </div>
+    );
 
-            {/* スキルボタン（仮置き） */}
-            <div style={{ flex: 1, display: 'flex', gap: '6px', alignItems: 'stretch' }}>
-                {[
-                    { label: '強化の儀', icon: '⚔️', cost: 2, desc: '自軍強化' },
-                    { label: '召喚加速', icon: '⚡', cost: 3, desc: 'コスト軽減' },
-                    { label: '霊脈解放', icon: '🌀', cost: 2, desc: '素材追加' },
-                ].map(skill => (
-                    <button key={skill.label} disabled style={{
-                        ...btnBase, flex: 1, display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', justifyContent: 'center', gap: '2px',
-                        background: '#111', color: '#555', border: '1px solid #2a2a3a',
-                        cursor: 'not-allowed', opacity: 0.6, fontSize: '10px'
+    // ───── 下アクションバー（レシピ横並び） ─────
+    const bottomContent = (
+        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', padding: '0 14px', gap: '12px', boxSizing: 'border-box' }}>
+            <div style={{ color: '#554466', fontSize: '10px', letterSpacing: '1px', flexShrink: 0 }}>📜</div>
+            {activeRecipes.map(recipe => (
+                <div key={recipe.id} style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', flexShrink: 0
+                }}>
+                    <div style={{
+                        background: '#100c1c', border: '1px solid #2a1a3a',
+                        borderRadius: '6px',
+                        width: '64px', height: '64px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                        <span style={{ fontSize: '16px' }}>{skill.icon}</span>
-                        <span>{skill.label}</span>
-                        <span style={{ fontSize: '9px', color: '#447' }}>AP {skill.cost} / {skill.desc}</span>
-                    </button>
-                ))}
+                        <PatternPreview pattern={recipe.pattern} />
+                    </div>
+                    <div style={{ fontSize: '9px', color: '#886699', letterSpacing: '0.5px', width: '64px', textAlign: 'center' }}>
+                        {recipe.name}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+
+    // ───── SHOPオーバーレイ ─────
+    const MATERIAL_NAMES: Record<number, string> = { 0: '骨', 1: '肉', 2: '霊' };
+    const recipeSelectOverlay = showRecipeSelect && (
+        <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(4, 2, 12, 0.97)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            padding: '24px 32px', gap: '0',
+        }}>
+            {/* ヘッダー */}
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', maxWidth: '860px', marginBottom: '20px',
+            }}>
+                <div>
+                    <div style={{ fontSize: '10px', color: '#554466', letterSpacing: '4px' }}>DAY {currentDay}</div>
+                    <div style={{ fontSize: '22px', color: '#ccaaff', fontWeight: 'bold', letterSpacing: '3px' }}>SHOP</div>
+                </div>
+                <div style={{
+                    background: '#1a1228', border: '1px solid #3a2040',
+                    borderRadius: '8px', padding: '8px 16px',
+                    fontSize: '18px', color: '#ffd700', fontWeight: 'bold',
+                }}>
+                    💰 {money} G
+                </div>
             </div>
+
+            {/* メインコンテンツ：レシピ上段 ＋ レリック下段 */}
+            <div style={{ width: '100%', maxWidth: '860px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                {/* レシピ section */}
+                <div style={{ background: 'rgba(20,10,35,0.8)', border: '1px solid #2a1040', borderRadius: '12px', padding: '16px 20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                        <span style={{ fontSize: '12px', color: '#886699', letterSpacing: '2px' }}>📜 新レシピ</span>
+                        <span style={{ fontSize: '10px', color: '#554466' }}>— 1つ選択</span>
+                        {pickedRecipeId && <span style={{ fontSize: '10px', color: '#66bb66', marginLeft: '4px' }}>✓ 選択済み</span>}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                        {offeredRecipes.map(recipe => {
+                            const stats = UNIT_STATS[recipe.id];
+                            const materials = recipe.pattern.flat().filter(v => v >= 0 && v !== 9);
+                            const materialCounts: Record<number, number> = {};
+                            materials.forEach(v => { materialCounts[v] = (materialCounts[v] ?? 0) + 1; });
+                            const isPicked = pickedRecipeId === recipe.id;
+                            const isDisabled = pickedRecipeId !== null && !isPicked;
+                            return (
+                                <div key={recipe.id}
+                                    onClick={() => { if (!isDisabled) { addEquippedRecipe(recipe.id); setPickedRecipeId(recipe.id); } }}
+                                    onMouseEnter={e => { if (!isDisabled) (e.currentTarget as HTMLDivElement).style.borderColor = isPicked ? '#66cc66' : '#aa77ff'; }}
+                                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = isPicked ? '#44aa44' : isDisabled ? '#221133' : '#5533aa'; }}
+                                    style={{
+                                        background: isPicked ? '#081808' : isDisabled ? '#080612' : '#0e0820',
+                                        border: `2px solid ${isPicked ? '#44aa44' : isDisabled ? '#221133' : '#5533aa'}`,
+                                        borderRadius: '10px', padding: '14px 16px',
+                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                                        cursor: isDisabled ? 'default' : 'pointer',
+                                        opacity: isDisabled ? 0.35 : 1,
+                                        transition: 'border-color 0.12s',
+                                    }}>
+                                    <div style={{ fontSize: '14px', fontWeight: 'bold', color: isPicked ? '#88ff88' : '#ddbbff' }}>
+                                        {isPicked && '✓ '}{recipe.name}
+                                    </div>
+                                    {/* パターン固定サイズ枠 */}
+                                    <div style={{ width: '72px', height: '72px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <div style={{ display: 'grid', gap: '2px', gridTemplateColumns: `repeat(${recipe.pattern[0].length}, 20px)` }}>
+                                            {recipe.pattern.map((rowArr, ri) => rowArr.map((val, ci) => (
+                                                <div key={`${ri}-${ci}`} style={{
+                                                    width: 20, height: 20, borderRadius: 3,
+                                                    backgroundColor: val === -1 ? 'transparent' : val === 9 ? '#333' : COLOR_HEX[val] ?? '#333',
+                                                    border: val !== -1 ? '1px solid #444' : 'none',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px',
+                                                }}>{val === 9 ? '✕' : val >= 0 ? PIECE_EMOJIS[val] : ''}</div>
+                                            )))}
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: '#776688', display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                        {Object.entries(materialCounts).map(([k, cnt]) => (
+                                            <span key={k}>{PIECE_EMOJIS[Number(k)]}{MATERIAL_NAMES[Number(k)]}×{cnt}</span>
+                                        ))}
+                                    </div>
+                                    {stats && (
+                                        <div style={{ fontSize: '10px', color: '#8899aa', display: 'flex', gap: '10px' }}>
+                                            <span>❤️ {stats.hp}</span><span>⚔️ {stats.atk}</span><span>🏹 {stats.range}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* レリック section */}
+                <div style={{ background: 'rgba(20,10,35,0.8)', border: '1px solid #2a1040', borderRadius: '12px', padding: '16px 20px' }}>
+                    <div style={{ fontSize: '12px', color: '#886699', letterSpacing: '2px', marginBottom: '14px' }}>🏪 レリック</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                        {offeredRelics.map(relic => {
+                            const owned = ownedRelics.includes(relic.id);
+                            const canAfford = money >= relic.price;
+                            return (
+                                <div key={relic.id} style={{
+                                    background: owned ? '#081208' : '#0e0820',
+                                    border: `1px solid ${owned ? '#1a3a1a' : canAfford ? '#3a1858' : '#1a1030'}`,
+                                    borderRadius: '10px', padding: '14px 16px',
+                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                                    opacity: owned ? 0.45 : 1,
+                                }}>
+                                    <div style={{ fontSize: '26px', lineHeight: 1 }}>{relic.icon}</div>
+                                    <div style={{ fontSize: '13px', color: '#ccaaff', fontWeight: 'bold', textAlign: 'center' }}>{relic.name}</div>
+                                    <div style={{ fontSize: '9px', color: '#664466', lineHeight: 1.5, textAlign: 'center', flex: 1 }}>{relic.description}</div>
+                                    <div style={{ fontSize: '14px', color: canAfford ? '#ffd700' : '#554400', fontWeight: 'bold', marginTop: '2px' }}>
+                                        {relic.price} G
+                                    </div>
+                                    <button
+                                        disabled={owned || !canAfford}
+                                        onClick={() => { if (spendMoney(relic.price)) addRelic(relic.id); }}
+                                        style={{
+                                            width: '100%', padding: '6px 0',
+                                            background: owned ? '#0d1a0d' : canAfford ? 'linear-gradient(135deg, #3a0a6a, #5a1a8a)' : '#100c18',
+                                            color: owned ? '#335533' : canAfford ? '#ddaaff' : '#332244',
+                                            border: `1px solid ${owned ? '#1a3a1a' : canAfford ? '#6622aa' : '#1a1030'}`,
+                                            borderRadius: '6px', fontSize: '11px', fontWeight: 'bold',
+                                            cursor: (owned || !canAfford) ? 'not-allowed' : 'pointer',
+                                        }}>
+                                        {owned ? '✓ 入手済み' : canAfford ? '購入する' : '所持金不足'}
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+
+            {/* 進むボタン */}
+            <button onClick={() => setShowRecipeSelect(false)} style={{
+                marginTop: '20px',
+                padding: '11px 48px',
+                background: 'linear-gradient(135deg, #2a0808, #5a1212)',
+                color: '#ffaaaa', border: '1px solid #662222',
+                borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer',
+                letterSpacing: '2px',
+            }}>
+                ⚔️ 儀式へ進む
+            </button>
         </div>
     );
 
     return (
         <>
+            {recipeSelectOverlay && ReactDOM.createPortal(recipeSelectOverlay, document.body)}
             {/* ───── 盤面オーバーレイ（フラッシュ・コンボ演出） ───── */}
             <div style={{ width: curWidth, height: '100%', position: 'relative', pointerEvents: 'none' }}
                 onClick={() => setPinnedPiece(null)}>
@@ -1106,6 +1203,7 @@ const RitualPhase: React.FC = () => {
             {/* ───── ポータル描画 ───── */}
             {panelSlot && ReactDOM.createPortal(leftPanel, panelSlot)}
             {bottomSlot && ReactDOM.createPortal(bottomContent, bottomSlot)}
+            {panelBottomSlot && ReactDOM.createPortal(panelBottomContent, panelBottomSlot)}
         </>
     );
 };

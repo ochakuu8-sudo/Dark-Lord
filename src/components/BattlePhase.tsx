@@ -10,7 +10,7 @@ const LEFT_PANEL_WIDTH = 260;
 const MAX_WAVES = 1;
 
 const BattlePhase: React.FC = () => {
-    const { gold, setPhase, phase, fieldWidth, incomingEnemies } = useGame();
+    const { setPhase, phase, fieldWidth, incomingEnemies } = useGame();
     const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -95,10 +95,10 @@ const BattlePhase: React.FC = () => {
                     display: 'flex', background: '#0a0812',
                     borderTop: '1px solid #2a1040'
                 }}>
-                    {/* 左パネル幅分のスペーサー */}
-                    <div style={{ width: `${LEFT_PANEL_WIDTH}px`, flexShrink: 0, borderRight: '2px solid #2a1040' }} />
-                    {/* アクションコンテンツ（BOARD_WIDTH幅） */}
-                    <div id="ritual-bottom-slot" style={{ width: `${BOARD_WIDTH}px`, flexShrink: 0, overflow: 'hidden' }} />
+                    {/* 左パネル下部スロット */}
+                    <div id="ritual-panel-bottom-slot" style={{ width: `${LEFT_PANEL_WIDTH}px`, flexShrink: 0, borderRight: '2px solid #2a1040', overflow: 'hidden' }} />
+                    {/* アクションコンテンツ（残り全幅） */}
+                    <div id="ritual-bottom-slot" style={{ flex: 1, overflow: 'hidden' }} />
                 </div>
             )}
 
@@ -110,8 +110,7 @@ const BattlePhase: React.FC = () => {
                 padding: '0 14px', gap: '18px',
                 fontSize: '12px', whiteSpace: 'nowrap', overflowX: 'auto'
             }}>
-                <span style={{ color: '#ffd700', fontWeight: 'bold' }}>💰 {gold} G</span>
-                <span style={{ color: '#ff7777' }}>
+<span style={{ color: '#ff7777' }}>
                     👿 敵: <span style={{ fontWeight: 'bold' }}>{uiState.heroCount}</span>
                     <span style={{ color: '#664444' }}> / {totalEnemies}</span>
                 </span>

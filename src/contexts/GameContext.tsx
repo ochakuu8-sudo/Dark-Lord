@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState } from 'react';
-import { ALL_RECIPES, ROWS, COLS, BOARD_WIDTH, ENEMY_BOARD_WIDTH, BLOCK_SIZE, MAX_AP, AP_PER_DAY, AP_GAUGE_MAX } from '../game/config';
+import { ALL_RECIPES, ROWS, COLS, BOARD_WIDTH, ENEMY_BOARD_WIDTH, BLOCK_SIZE } from '../game/config';
 import type { Recipe } from '../game/config';
+import type { HeroType } from '../game/entities';
 
-export type GamePhase = 'TITLE' | 'PREPARATION' | 'RITUAL' | 'BATTLE' | 'RESULT';
+export type GamePhase = 'TITLE' | 'RITUAL' | 'BATTLE' | 'RESULT';
 
 export interface SummonedUnit {
     id: string;      // 個体識別用
@@ -26,24 +27,17 @@ interface GameState {
     equippedRecipes: (string | null)[];
     unlockRecipe: (recipeId: string) => void;
     equipRecipe: (slotIndex: number, recipeId: string | null) => void;
+    addEquippedRecipe: (recipeId: string) => void;
     activeRecipes: Recipe[]; // derived from equippedRecipes
 
     currentDay: number;
     incrementDay: () => void;
-    gold: number;
-    addGold: (amount: number) => void;
-    spendGold: (amount: number) => boolean;
+    money: number;
+    addMoney: (amount: number) => void;
+    spendMoney: (amount: number) => boolean;
     ownedRelics: string[];
     addRelic: (relicId: string) => void;
     resetGame: () => void;
-
-    // AP（行動ポイント）
-    ap: number;
-    maxAp: number;
-    spendAp: (amount: number) => boolean;
-    refillAp: () => void;
-    apGauge: number;       // 0〜AP_GAUGE_MAX
-    addApGauge: (amount: number) => void;
 
     // パズルへのフィードバック用
     pendingPuzzlePieces: number[];
@@ -60,7 +54,6 @@ interface GameState {
     setExpectedSummons: (units: SummonedUnit[]) => void;
     incomingEnemies: any[];
     generateWave: (day: number) => void;
-    dropMaterials: (day: number) => number;
 
     // 共有PIXIアプリ（DefensePhaseが所有、RitualPhaseが借用）
     pixiAppRef: React.MutableRefObject<any | null>;
@@ -74,15 +67,15 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [phase, setPhase] = useState<GamePhase>('TITLE');
     const [summonedMonsters, setSummonedMonsters] = useState<SummonedUnit[]>([]);
 
-    // レシピ装備システム（上限なし・デバッグ中は全装備）
-    const [unlockedRecipes, setUnlockedRecipes] = useState<string[]>(ALL_RECIPES.map(r => r.id));
-    const [equippedRecipes, setEquippedRecipes] = useState<(string | null)[]>(ALL_RECIPES.map(r => r.id));
+    // レシピ装備システム（初期: オーク・スケルトン・ウィスプ）
+    const [unlockedRecipes, setUnlockedRecipes] = useState<string[]>(['orc', 'skeleton', 'wisp']);
+    const [equippedRecipes, setEquippedRecipes] = useState<(string | null)[]>(['orc', 'skeleton', 'wisp']);
     const activeRecipes = equippedRecipes
         .map(id => ALL_RECIPES.find(r => r.id === id))
         .filter((r): r is Recipe => r !== undefined);
 
     const [currentDay, setCurrentDay] = useState<number>(1);
-    const [gold, setGold] = useState<number>(100);
+    const [money, setMoney] = useState<number>(0);
     const [ownedRelics, setOwnedRelics] = useState<string[]>([]);
     const [ritualGrid, setRitualGrid] = useState<(any | null)[][]>([]);
     const [expectedSummons, setExpectedSummons] = useState<SummonedUnit[]>([]);
@@ -90,11 +83,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [incomingEnemies, setIncomingEnemies] = useState<any[]>([]);
 
     const [pendingPuzzlePieces, setPendingPuzzlePieces] = useState<number[]>([]);
-    const [ap, setAp] = useState<number>(AP_PER_DAY);
-    const apRef = React.useRef<number>(AP_PER_DAY);
-    const maxAp = MAX_AP;
-    const [apGauge, setApGauge] = useState<number>(0);
-    const apGaugeRef = React.useRef<number>(0);
 
     // 共有PIXIアプリ
     const pixiAppRef = React.useRef<any | null>(null);
@@ -141,22 +129,24 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
     }, []);
 
+    const addEquippedRecipe = React.useCallback((recipeId: string) => {
+        setUnlockedRecipes(prev => prev.includes(recipeId) ? prev : [...prev, recipeId]);
+        setEquippedRecipes(prev => prev.includes(recipeId) ? prev : [...prev, recipeId]);
+    }, []);
+
     const incrementDay = React.useCallback(() => {
         setCurrentDay(prev => prev + 1);
         setSummonedMonsters([]); // 戦闘盤面リセット
     }, []);
 
-    const addGold = React.useCallback((amount: number) => {
-        setGold(prev => prev + amount);
+    const addMoney = React.useCallback((amount: number) => {
+        setMoney(prev => prev + amount);
     }, []);
 
-    const spendGold = React.useCallback((amount: number) => {
+    const spendMoney = React.useCallback((amount: number) => {
         let success = false;
-        setGold(prev => {
-            if (prev >= amount) {
-                success = true;
-                return prev - amount;
-            }
+        setMoney(prev => {
+            if (prev >= amount) { success = true; return prev - amount; }
             return prev;
         });
         return success;
@@ -169,44 +159,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
     }, []);
 
-    const spendAp = React.useCallback((amount: number) => {
-        if (apRef.current < amount) return false;
-        apRef.current -= amount;
-        setAp(apRef.current);
-        return true;
-    }, []);
-
-    const refillAp = React.useCallback(() => {
-        const next = Math.min(apRef.current + AP_PER_DAY, MAX_AP);
-        apRef.current = next;
-        setAp(next);
-    }, []);
-
-    const addApGauge = React.useCallback((amount: number) => {
-        const next = apGaugeRef.current + amount;
-        if (next >= AP_GAUGE_MAX) {
-            const apGain = Math.floor(next / AP_GAUGE_MAX);
-            const newAp = Math.min(apRef.current + apGain, MAX_AP);
-            apRef.current = newAp;
-            apGaugeRef.current = next % AP_GAUGE_MAX;
-            setAp(newAp);
-            setApGauge(apGaugeRef.current);
-        } else {
-            apGaugeRef.current = next;
-            setApGauge(next);
-        }
-    }, []);
-
     const saveRitualGrid = React.useCallback((grid: (any | null)[][]) => {
         setRitualGrid(grid);
     }, []);
 
     const generateWave = React.useCallback((day: number) => {
-        // 敵陣列(col): 0=最前衛(左/自陣に近い), 6=最後衛
+        // 敵陣列(col): 0=最前衛(左/自陣に近い), 8=最後衛
         const FORMATION: Record<string, number> = {
             '重騎士': 0, 'パラディン': 0, '剣士': 1,
             '村人': 1, '農夫': 2,
-            '弓兵': 4, '魔法使い': 5, '大魔道士': 6,
+            '弓兵': 5, '魔法使い': 6, '大魔道士': 7,
         };
 
         const enemies = [];
@@ -234,39 +196,29 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 type,
                 row,
                 col,
-                isElite: Math.random() < 0.1
+                isElite: day >= 2 && Math.random() < 0.1
             });
         }
-        // ボスを最後列中央に固定配置
+        // ボスを最後列中央に固定配置（dayでHPスケール）
         enemies.push({
             id: `boss-${day}`,
             type: 'ボス',
-            row: 3,
-            col: 6,
+            row: 4, // 9行中央
+            col: 8, // 9列最後衛
             isElite: false,
+            hpScale: 1 + (day - 1) * 0.8, // Day1=1x, Day2=1.8x, Day3=2.6x...
         });
         setIncomingEnemies(enemies);
     }, []);
 
-    const dropMaterials = React.useCallback((day: number) => {
-        const colors = [0, 1, 2];
-        const count = 38 + day * 2;
-        for (let i = 0; i < count; i++) {
-            const color = colors[Math.floor(Math.random() * colors.length)];
-            addPendingPuzzlePiece(color);
-        }
-        return count;
-    }, [addPendingPuzzlePiece]);
-
     const resetGame = React.useCallback(() => {
         setSummonedMonsters([]);
-        setEquippedRecipes(ALL_RECIPES.map(r => r.id));
+        setUnlockedRecipes(['orc', 'skeleton', 'wisp']);
+        setEquippedRecipes(['orc', 'skeleton', 'wisp']);
         setCurrentDay(1);
-        setGold(100);
+        setMoney(0);
         setOwnedRelics([]);
         setPendingPuzzlePieces([]);
-        setAp(AP_PER_DAY);
-        setApGauge(0);
         setRitualGrid([]);
         setExpectedSummons([]);
         setIncomingEnemies([]);
@@ -276,16 +228,15 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         <GameContext.Provider value={{
             phase, setPhase,
             summonedMonsters, addSummonedMonster, addSummonedMonsters, clearSummonedMonsters,
-            unlockedRecipes, equippedRecipes, unlockRecipe, equipRecipe, activeRecipes,
+            unlockedRecipes, equippedRecipes, unlockRecipe, equipRecipe, addEquippedRecipe, activeRecipes,
             currentDay, incrementDay,
-            gold, addGold, spendGold,
+            money, addMoney, spendMoney,
             ownedRelics, addRelic,
             ritualGrid, saveRitualGrid,
             resetGame,
             pendingPuzzlePieces, addPendingPuzzlePiece, consumePendingPuzzlePieces,
-            ap, maxAp, spendAp, refillAp, apGauge, addApGauge,
             expectedSummons, setExpectedSummons,
-            fieldWidth, incomingEnemies, generateWave, dropMaterials,
+            fieldWidth, incomingEnemies, generateWave,
             pixiAppRef, pixiAppVersion, registerPixiApp
         }}>
             {children}

@@ -10,8 +10,6 @@ export interface Recipe {
 // Colors: 0=赤(Fire), 1=青(Water), 2=緑(Earth), 3=黄(Light), 4=紫(Dark)
 
 // 形ごとにロール（Melee=縦3, Tank=2x2, Ranged=横3, Magic=十字）を設定し、各色に用意する
-export const AP_GAUGE_MAX = 100;
-export const AP_GAUGE_PER_MATCH = 20; // 1マッチあたりのゲージ増加量（5マッチ=1AP）
 
 export const ALL_RECIPES: Recipe[] = [
     {
@@ -127,15 +125,15 @@ export const MATERIAL_BG_COLORS: Record<string, number> = {
     spirit: 0x1a0a2e, // 霊: 濃い紫
 };
 
-export const ROWS = 7;
-export const COLS = 7;
-export const ENEMY_COLS = 7; // 敵陣の列数（将来的に可変予定、デフォルト7×7）
-export const BLOCK_SIZE = 70; // 7x7盤面 (7x70 = 490px)
+export const ROWS = 9;
+export const COLS = 9;
+export const ENEMY_COLS = 9; // 敵陣の列数
+export const BLOCK_SIZE = 54; // 9x9盤面 (9x54 = 486px)
 export const BOARD_WIDTH = COLS * BLOCK_SIZE;
 export const ENEMY_BOARD_WIDTH = ENEMY_COLS * BLOCK_SIZE;
 export const BOARD_HEIGHT = ROWS * BLOCK_SIZE;
-export const MAX_AP = 10;
-export const AP_PER_DAY = 0; // AP is earned through summon combos only
+export const MAX_AP = 500; // ソウルの上限
+export const AP_PER_DAY = 30; // day開始時のソウル配布
 
 export interface Relic {
     id: string;
@@ -146,7 +144,8 @@ export interface Relic {
 }
 
 export const RELICS: Relic[] = [
-    { id: 'giant_heart', name: '巨人の心臓', description: '全魔物のHPが2倍になる。ただし移動速度が30%低下する。', price: 150, icon: '❤️' },
-    { id: 'fire_crown', name: '炎の王冠', description: '赤系ユニットの攻撃力が1.5倍になる。それ以外は0.8倍になる。', price: 150, icon: '👑' },
-    { id: 'mana_prism', name: 'マナの水晶', description: '自拠点の最大HPが半分になる代わりに、強力な魔法効果を得る。', price: 100, icon: '💎' },
+    { id: 'giant_heart', name: '巨人の心臓', description: '全魔物のHPが2倍になる。ただし移動速度が30%低下する。', price: 80, icon: '❤️' },
+    { id: 'fire_crown', name: '炎の王冠', description: '赤系ユニットの攻撃力が1.5倍になる。それ以外は0.8倍になる。', price: 80, icon: '👑' },
+    { id: 'mana_prism', name: 'マナの水晶', description: '自拠点の最大HPが半分になる代わりに、強力な魔法効果を得る。', price: 60, icon: '💎' },
+    { id: 'necromancer_guide', name: '死霊術師の手引き', description: '敵ユニット撃破時25%の確率でスケルトンが召喚される。', price: 100, icon: '📖' },
 ];

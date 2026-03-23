@@ -4,8 +4,7 @@ import gsap from 'gsap';
 import { PixiPlugin } from 'gsap/PixiPlugin';
 import { useGame } from '../contexts/GameContext';
 import type { EntityState } from '../game/entities';
-import { UNIT_STATS, HERO_ROSTER, PASSIVE_DESCRIPTIONS } from '../game/entities';
-import type { HeroType } from '../game/entities';
+import { UNIT_STATS, PASSIVE_DESCRIPTIONS } from '../game/entities';
 import { ROWS, BLOCK_SIZE as CFG_BLOCK_SIZE, BOARD_WIDTH, ALL_RECIPES } from '../game/config';
 
 const MATERIAL_PREFIX: Record<string, string> = { bone: '骨', meat: '肉', spirit: '霊' };
@@ -26,7 +25,6 @@ PixiPlugin.registerPIXI(PIXI);
 const BLOCK_SIZE = CFG_BLOCK_SIZE;
 const FIELD_HEIGHT = ROWS * BLOCK_SIZE;
 const DEMON_BASE = { x: 40, y: FIELD_HEIGHT / 2 }; // 左端境界（城なし）
-const MAX_WAVES = 1;
 
 type ProjectileStyle = 'arrow' | 'orb' | 'bomb' | 'sword_flash';
 
@@ -96,7 +94,7 @@ interface DefensePhaseProps {
 const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChange }) => {
     const {
         summonedMonsters,
-        addGold, currentDay, incrementDay, setPhase, phase,
+        currentDay, incrementDay, setPhase, phase,
         incomingEnemies, ownedRelics, addPendingPuzzlePiece,
         expectedSummons, fieldWidth, registerPixiApp, ritualGrid
     } = useGame();
@@ -131,7 +129,6 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         nextWaveCountdown: 0,
         waveInProgress: false,
         eliteIds: new Set<string>(),
-        pendingGold: 0,
         killCount: 0,
         phaseEnded: false,
         currentPhase: phase,
@@ -150,7 +147,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         const dayHpMult = 1.0 + (currentDay - 1) * 0.4;
         incomingEnemies.forEach(en => {
             const stats = UNIT_STATS[en.type] || UNIT_STATS['村人'];
-            const finalHp = Math.floor(stats.maxHp! * (en.isElite ? 2 : 1) * dayHpMult);
+            const finalHp = Math.floor(stats.maxHp! * (en.isElite ? 2 : 1) * (en.hpScale ?? 1) * dayHpMult);
             s.entities.push({
                 id: en.id, type: en.type, faction: 'HERO',
                 x: BOARD_WIDTH + en.col * BLOCK_SIZE + BLOCK_SIZE / 2, y: en.row * BLOCK_SIZE + BLOCK_SIZE / 2,
@@ -596,12 +593,9 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                 }
 
-                // Gold reward on hero death
+                // Kill count
                 if (ent.faction === 'HERO') {
-                    const goldDrop = isElite ? 18 : 5;
-                    s.pendingGold += goldDrop;
                     s.killCount++;
-                    s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 25, text: `+ ${goldDrop} G`, life: 70, maxLife: 70, color: 0xffd700 });
                     if (isElite) s.eliteIds.delete(ent.id);
 
                     // Necromancer Guide effect (Relic)
@@ -983,10 +977,9 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         const castleAlive = aliveEntities.some(e => e.type === 'ボス' && e.faction === 'HERO');
         if (!castleAlive && s.waveInProgress && !s.phaseEnded) {
             s.phaseEnded = true;
-            addGold(120 + currentDay * 80);
             setTimeout(() => {
                 incrementDay();
-                setPhase('PREPARATION');
+                setPhase('RITUAL');
             }, 2000);
         }
 
@@ -1021,8 +1014,6 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         }
 
         if (s.frameCount % 6 === 0) {
-            // Flush pending gold
-            if (s.pendingGold > 0) { addGold(s.pendingGold); s.pendingGold = 0; }
             setUiState({
                 wave: s.wave, demonCount, heroCount,
                 nextWaveIn: Math.ceil(s.nextWaveCountdown / 60),

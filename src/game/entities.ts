@@ -123,7 +123,7 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'パラディン': { maxHp: 6000, attack: 100, range: 55, speed: 0.7, maxCooldown: 80, color: 0xffdd44 },
     '大魔道士': { maxHp: 1500, attack: 275, range: 400, speed: 0.9, maxCooldown: 100, color: 0xcc44ff },
     '勇者': { maxHp: 25000, attack: 325, range: 65, speed: 1.2, maxCooldown: 50, color: 0xff2222 },
-    'ボス': { maxHp: 2500, attack: 100, range: 9999, speed: 0, maxCooldown: 60, color: 0xff4400 },
+    'ボス': { maxHp: 800, attack: 60, range: 9999, speed: 0, maxCooldown: 60, color: 0xff4400 },
 };
 
 export const PASSIVE_DESCRIPTIONS: Record<string, string> = {

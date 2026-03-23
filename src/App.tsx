@@ -1,7 +1,6 @@
 import React from 'react';
 import { GameProvider, useGame } from './contexts/GameContext';
 import BattlePhase from './components/BattlePhase';
-import PreparationPhase from './components/PreparationPhase';
 import ResponsiveWrapper from './components/ResponsiveWrapper';
 import './App.css';
 
@@ -14,10 +13,9 @@ const GameController: React.FC = () => {
         <div className="title-screen">
           <h1>魔王軍の防衛儀式</h1>
           <p>パズルで魔物を召喚し、迫りくる勇者を撃退せよ</p>
-          <button className="start-btn" onClick={() => setPhase('PREPARATION')}>ゲーム開始</button>
+          <button className="start-btn" onClick={() => setPhase('RITUAL')}>ゲーム開始</button>
         </div>
       )}
-      {phase === 'PREPARATION' && <PreparationPhase />}
       {(phase === 'RITUAL' || phase === 'BATTLE') && <BattlePhase />}
       {phase === 'RESULT' && (
         <div className="result-screen">
