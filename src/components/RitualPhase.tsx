@@ -45,7 +45,7 @@ const RitualPhase: React.FC = () => {
         generateWave, currentPattern, setPattern,
         equippedRecipes, addEquippedRecipe,
         ownedRelics, addRelic,
-        money, addMoney,
+        money,
         isDebugMode,
         pendingPuzzlePieces, consumePendingPuzzlePieces,
         debugGridClearSignal,
@@ -170,8 +170,6 @@ const RitualPhase: React.FC = () => {
     const [comboCount, setComboCount] = useState(0);
     const [comboKey, setComboKey] = useState(0); // アニメーション再トリガー用
     const [flashCells, setFlashCells] = useState<{ r: number; c: number }[]>([]);
-    const [isDraggingSummoned, setIsDraggingSummoned] = useState(false);
-    const sellZoneRef = useRef<HTMLDivElement>(null);
     const [pinnedPiece, setPinnedPiece] = useState<{ monsterType: string; pos: { x: number; y: number } } | null>(null);
     const pinnedPieceInfoRef = useRef<HTMLDivElement | null>(null);
 
@@ -388,7 +386,6 @@ const RitualPhase: React.FC = () => {
                 const scaleX0 = ((appRef.current as any)?.screen?.width ?? rect0.width) / rect0.width;
                 const scaleY0 = ((appRef.current as any)?.screen?.height ?? rect0.height) / rect0.height;
                 let rafId0: number | null = null;
-                setIsDraggingSummoned(true);
                 const onPointerMove = (e: PointerEvent) => {
                     const dx = e.clientX - startClientX;
                     const dy = e.clientY - startClientY;
@@ -403,10 +400,9 @@ const RitualPhase: React.FC = () => {
                         rafId0 = null;
                     });
                 };
-                const onPointerUp = (e: PointerEvent) => {
+                const onPointerUp = (_e: PointerEvent) => {
                     window.removeEventListener('pointermove', onPointerMove);
                     window.removeEventListener('pointerup', onPointerUp);
-                    setIsDraggingSummoned(false);
                     if (!gfx) { interactionParams.current.isDragging = false; return; }
                     if (!hasDragged) {
                         // タップ判定: infoを表示
@@ -416,19 +412,6 @@ const RitualPhase: React.FC = () => {
                             prev?.monsterType === block.monsterType ? null
                             : { monsterType: block.monsterType!, pos: { x: startGlobalX, y: startGlobalY } }
                         );
-                        return;
-                    }
-                    // ドラッグ判定: 通常ドロップ処理
-                    const sellRect = sellZoneRef.current?.getBoundingClientRect();
-                    if (sellRect && e.clientX >= sellRect.left && e.clientX <= sellRect.right && e.clientY >= sellRect.top && e.clientY <= sellRect.bottom) {
-                        gfx.zIndex = 0; gfx.scale.set(1);
-                        interactionParams.current.isDragging = false;
-                        const ng = gridRef.current.map(r => r ? [...r] : Array(curCols).fill(null));
-                        ng[block.row][block.col] = null;
-                        gridRef.current = ng;
-                        setGrid([...ng.map(r => [...r])]);
-                        saveRitualGrid(ng);
-                        addMoney(10);
                         return;
                     }
                     const tr = Math.floor(gfx.y / curBlockSize);
@@ -996,24 +979,28 @@ const RitualPhase: React.FC = () => {
         </>
     );
 
-    // ───── 左パネル下部（売却ゾーン＋戦闘へ） ─────
+    // ───── 左パネル下部（図鑑ボタン＋戦闘へ） ─────
     const panelBottomContent = (
         <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', padding: '6px 8px', gap: '6px' }}>
-            {/* 売却ゾーン */}
-            <div ref={sellZoneRef} style={{
-                flex: 1, padding: '6px',
-                border: `2px dashed ${isDraggingSummoned ? '#ff8844' : '#3a2030'}`,
-                borderRadius: '8px',
-                background: isDraggingSummoned ? 'rgba(255,80,20,0.12)' : 'rgba(20,10,15,0.6)',
-                textAlign: 'center', transition: 'all 0.15s',
-                pointerEvents: 'none',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            }}>
-                <div style={{ fontSize: '16px', lineHeight: 1 }}>💰</div>
-                <div style={{ color: isDraggingSummoned ? '#ff8844' : '#553344', fontSize: '9px', marginTop: '2px' }}>
-                    {isDraggingSummoned ? '売却 +10G' : '売却ゾーン'}
-                </div>
-            </div>
+            {/* 図鑑ボタン */}
+            <button
+                onClick={() => setIsBestiaryOpen(true)}
+                style={{
+                    flex: 1, padding: '6px',
+                    border: '1px solid #3a2050',
+                    borderRadius: '8px',
+                    background: 'rgba(20,10,30,0.8)',
+                    color: '#aa88cc',
+                    fontSize: '12px', fontWeight: 'bold', cursor: 'pointer',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                    transition: 'background 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(40,20,60,0.9)'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#7744aa'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(20,10,30,0.8)'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#3a2050'; }}
+            >
+                <div style={{ fontSize: '18px', lineHeight: 1 }}>📖</div>
+                <div style={{ fontSize: '9px', letterSpacing: '1px' }}>図鑑</div>
+            </button>
             {/* 戦闘へ */}
             <button
                 disabled={showRecipeSelect}
