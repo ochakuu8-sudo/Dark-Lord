@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState } from 'react';
-import { ALL_RECIPES, ROWS, COLS, BOARD_WIDTH, ENEMY_BOARD_WIDTH, BLOCK_SIZE } from '../game/config';
+import { ALL_RECIPES, ROWS, BOARD_WIDTH, ENEMY_BOARD_WIDTH } from '../game/config';
 import type { Recipe } from '../game/config';
 import type { HeroType } from '../game/entities';
 
@@ -81,7 +81,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [ownedRelics, setOwnedRelics] = useState<string[]>([]);
     const [ritualGrid, setRitualGrid] = useState<(any | null)[][]>([]);
     const [expectedSummons, setExpectedSummons] = useState<SummonedUnit[]>([]);
-    const [fieldWidth, setFieldWidth] = useState<number>(BOARD_WIDTH + ENEMY_BOARD_WIDTH);
+    const [fieldWidth] = useState<number>(BOARD_WIDTH + ENEMY_BOARD_WIDTH);
     const [incomingEnemies, setIncomingEnemies] = useState<any[]>([]);
     const [currentPattern, setPattern] = useState<string>('random');
 

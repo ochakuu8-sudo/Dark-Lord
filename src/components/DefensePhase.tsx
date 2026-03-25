@@ -268,9 +268,13 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         const app = new PIXI.Application({
             width: fieldWidth, height: FIELD_HEIGHT, backgroundColor: 0x111a11,
-            resolution: safeResolution, autoDensity: true, antialias: true
+            resolution: safeResolution, autoDensity: true, antialias: false,
+            powerPreference: 'high-performance'
         });
         pixiContainerRef.current.appendChild(app.view as unknown as Node);
+        const canvas = app.view as HTMLCanvasElement;
+        canvas.style.willChange = 'transform';
+        canvas.style.transform = 'translateZ(0)';
         appRef.current = app;
         registerPixiApp(app); // 共有PIXIアプリとしてGameContextに登録
 
@@ -309,11 +313,16 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         const floatLayer = new PIXI.Container(); app.stage.addChild(floatLayer); floatLayerRef.current = floatLayer;
         const ghostLayer = new PIXI.Container(); ghostLayer.alpha = 0.5; app.stage.addChild(ghostLayer); ghostLayerRef.current = ghostLayer;
 
-        // Static background grid (Integrated with Puzzle) 
+        // Static background (drawn once, never redrawn)
         const staticBgGr = new PIXI.Graphics();
-        const gridWidth = BOARD_WIDTH; // Use the exported constant
+        const gridWidth = BOARD_WIDTH;
 
-        // 1. Grid Area
+        // 0. Demon area fill
+        staticBgGr.beginFill(0x220022, 0.5);
+        staticBgGr.drawRect(0, 0, gridWidth, FIELD_HEIGHT);
+        staticBgGr.endFill();
+
+        // 1. Grid lines
         staticBgGr.lineStyle(1, 0x223322, 0.4);
         for (let x = 0; x <= gridWidth; x += BLOCK_SIZE) {
             staticBgGr.moveTo(x, 0); staticBgGr.lineTo(x, FIELD_HEIGHT);
@@ -322,17 +331,16 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             staticBgGr.moveTo(0, y); staticBgGr.lineTo(fieldWidth, y);
         }
 
-        // 2. Castle Wall (Visual Boundary at BOARD_WIDTH)
-        staticBgGr.lineStyle(4, 0x444455, 0.8);
+        // 2. Castle Wall boundary
+        staticBgGr.lineStyle(4, 0x550055, 0.8);
         staticBgGr.moveTo(gridWidth, 0);
         staticBgGr.lineTo(gridWidth, FIELD_HEIGHT);
-
         for (let y = 20; y < FIELD_HEIGHT; y += 40) {
             staticBgGr.lineStyle(2, 0x333344, 0.6);
             staticBgGr.drawRect(gridWidth - 5, y, 10, 20);
         }
 
-        // 3. Battlefield Area (Right side, 1000 to 1400px)
+        // 3. Battlefield grid (right side)
         staticBgGr.lineStyle(1, 0x1a1a1a, 0.3);
         const startX = gridWidth + BLOCK_SIZE;
         for (let x = startX; x < fieldWidth; x += BLOCK_SIZE) {
@@ -626,11 +634,6 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
             if (ent.faction === 'HERO') heroCount++; else demonCount++;
 
-            // RITUAL中は敵は静止（移動・攻撃しない）
-            if (s.currentPhase === 'RITUAL' && ent.faction === 'HERO') {
-                aliveEntities.push(ent);
-                continue;
-            }
 
             let target: EntityState | null = null;
             let minDist = Infinity;
@@ -665,7 +668,6 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 }
             } else {
                 const isHealer = ent.passiveAbilities?.some(pa => pa.type === 'HEAL_SHOT');
-                const isSkeleton = ent.type.includes('skeleton');
 
                 if (isHealer) {
                     // Support Logic: Target lowest HP ally
@@ -697,8 +699,6 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
 
             if (ent.cooldown > 0) ent.cooldown -= delta;
-
-            const isWizardUnit = ent.type.includes('wizard');
 
             if (target) {
                 if (minDist <= ent.range) {
@@ -1066,54 +1066,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
     const renderHeroForecast = () => {
         if (!ghostLayerRef.current) return;
-        // 実体エンティティが表示されるためghost不要
         ghostLayerRef.current.removeChildren();
-        return;
-        const layer = ghostLayerRef.current;
-        const pool = ghostGfxPool.current;
-        const currentIds = new Set<string>();
-
-        incomingEnemies.forEach((en) => {
-            const id = `forecast-${en.id}`;
-            currentIds.add(id);
-            let g = pool.get(id);
-            if (!g) {
-                g = new PIXI.Graphics();
-                pool.set(id, g);
-                layer.addChild(g);
-
-                const label = new PIXI.Text(en.type, {
-                    fontSize: 14, fill: 0xffffff, fontWeight: 'bold',
-                    stroke: 0x000000, strokeThickness: 3
-                });
-                label.anchor.set(0.5, 0); label.y = 20;
-                g.addChild(label);
-
-                if (en.isElite) {
-                    const eliteLabel = new PIXI.Text("ELITE", {
-                        fontSize: 10, fill: 0xffd700, fontWeight: 'bold'
-                    });
-                    eliteLabel.anchor.set(0.5, 1); eliteLabel.y = -20;
-                    g.addChild(eliteLabel);
-                }
-            }
-            g.clear();
-            const stats = UNIT_STATS[en.type] || { color: 0xcccccc };
-            const color = stats.color || 0xcccccc;
-            const sz = en.isElite ? 22 : 15;
-            g.beginFill(color, 0.7);
-            g.lineStyle(2, en.isElite ? 0xffd700 : 0xffaa00, 0.9);
-            g.drawPolygon([-sz, 0, 0, -sz, sz, 0, 0, sz]);
-            g.endFill();
-            g.x = BOARD_WIDTH + en.col * BLOCK_SIZE + BLOCK_SIZE / 2;
-            g.y = en.row * BLOCK_SIZE + BLOCK_SIZE / 2;
-        });
-
-        pool.forEach((g, id) => {
-            if (id.startsWith('forecast-') && !currentIds.has(id)) {
-                g.destroy(); pool.delete(id);
-            }
-        });
     };
 
     // ── Render ────────────────────────────
@@ -1127,37 +1080,6 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             if (ghostLayerRef.current) ghostLayerRef.current.removeChildren();
             ghostGfxPool.current.clear();
         }
-
-        // ── Render Base (Castle) ──
-        const bg = baseGraphicsRef.current;
-        bg.clear();
-
-        const gridWidth = BOARD_WIDTH;
-
-        // 1. Grid Area (Puzzle + Battlefield)
-        bg.lineStyle(1, 0x223322, 0.4);
-        // Vertical lines
-        for (let x = 0; x <= fieldWidth; x += BLOCK_SIZE) {
-            const isBorder = (x === gridWidth);
-            if (isBorder) bg.lineStyle(2, 0x444455, 0.8);
-            else bg.lineStyle(1, x > gridWidth ? 0x1a1a1a : 0x223322, 0.4);
-
-            bg.moveTo(x, 0); bg.lineTo(x, FIELD_HEIGHT);
-        }
-        // Horizontal lines (Lanes)
-        bg.lineStyle(1, 0x223322, 0.4);
-        for (let y = 0; y <= FIELD_HEIGHT; y += BLOCK_SIZE) {
-            bg.moveTo(0, y); bg.lineTo(fieldWidth, y);
-        }
-
-        // 2. Left Boundary (魔界の門)
-        bg.lineStyle(4, 0x550055, 0.8);
-        bg.moveTo(gridWidth, 0);
-        bg.lineTo(gridWidth, FIELD_HEIGHT);
-        bg.lineStyle(0);
-        bg.beginFill(0x220022, 0.5);
-        bg.drawRect(0, 0, gridWidth, FIELD_HEIGHT);
-        bg.endFill();
 
         // ── Entities (object pool) ──
         const el = entitiesLayerRef.current;

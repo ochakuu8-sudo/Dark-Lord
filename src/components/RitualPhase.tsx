@@ -41,7 +41,6 @@ const RitualPhase: React.FC = () => {
         ritualGrid: storedGrid, saveRitualGrid,
         setExpectedSummons,
         expectedSummons,
-        fieldWidth,
         pixiAppRef, pixiAppVersion,
         generateWave, currentPattern, setPattern,
         equippedRecipes, addEquippedRecipe,
@@ -98,7 +97,7 @@ const RitualPhase: React.FC = () => {
     const gridRef = useRef<(BlockData | null)[][]>(grid);
     const [isBestiaryOpen, setIsBestiaryOpen] = useState(false);
 
-    const [hasSummoned, setHasSummoned] = useState(false);
+
     const [comboCount, setComboCount] = useState(0);
     const [comboKey, setComboKey] = useState(0); // アニメーション再トリガー用
     const [flashCells, setFlashCells] = useState<{ r: number; c: number }[]>([]);
@@ -677,10 +676,9 @@ const RitualPhase: React.FC = () => {
         matchedCellsRef.current = newMatchedCells;
         
         // Prevent infinite loop by only updating if the content changed
-        setExpectedSummons(prev => {
-            if (JSON.stringify(prev) === JSON.stringify(summons)) return prev;
-            return summons;
-        });
+        if (JSON.stringify(expectedSummons) !== JSON.stringify(summons)) {
+            setExpectedSummons(summons);
+        }
         
         const used = Array(curRows).fill(null).map((_, r) =>
             Array(curCols).fill(null).map((_, c) => newMatchedCells.has(`${r},${c}`))
@@ -694,8 +692,6 @@ const RitualPhase: React.FC = () => {
         if (!result) { onComplete?.([]); return; }
         const { summons, matchGroups } = result;
         if (summons.length === 0) { onComplete?.([]); return; }
-
-        setHasSummoned(true);
 
         // 1召喚ごとにコンボ演出
         const STEP_MS = 450;
@@ -854,8 +850,6 @@ const RitualPhase: React.FC = () => {
             </div>
         );
     };
-
-    const btnBase: React.CSSProperties = { border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', padding: '0', transition: 'opacity 0.15s' };
 
     const panelSlot = document.getElementById('ritual-panel-slot');
     const bottomSlot = document.getElementById('ritual-bottom-slot');
@@ -1040,7 +1034,7 @@ const RitualPhase: React.FC = () => {
                                     </div>
                                     {stats && (
                                         <div style={{ fontSize: '10px', color: '#8899aa', display: 'flex', gap: '10px' }}>
-                                            <span>❤️ {stats.hp}</span><span>⚔️ {stats.atk}</span><span>🏹 {stats.range}</span>
+                                            <span>❤️ {stats.hp}</span><span>⚔️ {stats.attack}</span><span>🏹 {stats.range}</span>
                                         </div>
                                     )}
                                 </div>
@@ -1201,7 +1195,7 @@ const RitualPhase: React.FC = () => {
             })()}
 
             {/* ───── デバッグ: 敵軍パターン選択 ───── */}
-            {import.meta.env.DEV && (
+            {import.meta.env.DEV && ReactDOM.createPortal(
                 <div style={{
                     position: 'fixed', bottom: 12, right: 12, zIndex: 9999,
                     background: 'rgba(0,0,0,0.85)', border: '1px solid #444',
@@ -1240,7 +1234,8 @@ const RitualPhase: React.FC = () => {
                     >
                         適用
                     </button>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* ───── ポータル描画 ───── */}
