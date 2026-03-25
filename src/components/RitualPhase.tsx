@@ -46,6 +46,9 @@ const RitualPhase: React.FC = () => {
         equippedRecipes, addEquippedRecipe,
         ownedRelics, addRelic,
         money, addMoney, spendMoney,
+        isDebugMode,
+        pendingPuzzlePieces, consumePendingPuzzlePieces,
+        debugGridClearSignal,
     } = useGame();
 
     // レシピ選択オーバーレイ状態
@@ -56,6 +59,12 @@ const RitualPhase: React.FC = () => {
 
     // Day開始時: wave生成・レシピ選択オーバーレイ表示（Day2以降のみ）
     useEffect(() => {
+        if (isDebugMode) {
+            // デバッグモード: wave自動生成・レシピ選択をスキップ
+            setPickedRecipeId('debug');
+            setShowRecipeSelect(false);
+            return;
+        }
         generateWave(currentDay);
         setPickedRecipeId(null);
         // レリックショップ更新（毎日3種ランダム）
@@ -787,6 +796,40 @@ const RitualPhase: React.FC = () => {
         piecesDroppedThisDay.current = true;
         dropNewPieces(2); // Day2+=2ツモ(4p)
     }, [pickedRecipeId, activeRecipes, currentDay, dropNewPieces]);
+
+    // デバッグモード: pendingPuzzlePieces を消費して盤面に配置
+    useEffect(() => {
+        if (!isDebugMode) return;
+        if (pendingPuzzlePieces.length === 0) return;
+        const pieces = consumePendingPuzzlePieces();
+        if (pieces.length === 0) return;
+        const rnd = () => Math.random().toString(36).substr(2, 9);
+        const targetGrid = gridRef.current.map(row => row ? [...row] : Array(curCols).fill(null));
+        for (const pieceType of pieces) {
+            const empty: { r: number; c: number }[] = [];
+            for (let r = 0; r < curRows; r++) {
+                for (let c = 0; c < curCols; c++) {
+                    if (!targetGrid[r][c]) empty.push({ r, c });
+                }
+            }
+            if (empty.length === 0) break;
+            const pos = empty[Math.floor(Math.random() * empty.length)];
+            const id = rnd();
+            targetGrid[pos.r][pos.c] = { id, type: pieceType, row: pos.r, col: pos.c, groupId: `g-${rnd()}` };
+        }
+        gridRef.current = targetGrid;
+        setGrid([...targetGrid.map(r => [...r])]);
+        saveRitualGrid(targetGrid);
+    }, [pendingPuzzlePieces, isDebugMode]);
+
+    // デバッグモード: 盤面クリア信号を受け取ったら全ピースを削除
+    useEffect(() => {
+        if (!isDebugMode || debugGridClearSignal === 0) return;
+        const emptyGrid = Array(curRows).fill(null).map(() => Array(curCols).fill(null));
+        gridRef.current = emptyGrid;
+        setGrid(emptyGrid);
+        saveRitualGrid(emptyGrid);
+    }, [debugGridClearSignal]);
 
     useEffect(() => {
         // DefensePhaseが所有する共有PIXIアプリを使う（自前アプリは作らない）

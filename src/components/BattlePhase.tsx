@@ -78,8 +78,8 @@ const BattlePhase: React.FC = () => {
                         <DefensePhase onStateChange={setUiState} />
                     </div>
 
-                    {/* 儀式フェーズ：コンボ演出オーバーレイ（デバッグモード時は非表示） */}
-                    {phase === 'RITUAL' && !isDebugMode && (
+                    {/* 儀式フェーズ：コンボ演出オーバーレイ */}
+                    {phase === 'RITUAL' && (
                         <div style={{
                             position: 'absolute', left: 0, top: 0,
                             width: `${BOARD_WIDTH}px`, height: '100%',
@@ -91,8 +91,8 @@ const BattlePhase: React.FC = () => {
                 </div>
             </div>
 
-            {/* 儀式アクションバー（APゲージ・召喚・スキル）※デバッグモード時は非表示 */}
-            {phase === 'RITUAL' && !isDebugMode && (
+            {/* 儀式アクションバー（APゲージ・召喚・スキル） */}
+            {phase === 'RITUAL' && (
                 <div style={{
                     height: '110px', flexShrink: 0,
                     display: 'flex', background: '#0a0812',

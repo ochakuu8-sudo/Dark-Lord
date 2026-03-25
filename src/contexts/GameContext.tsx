@@ -69,6 +69,8 @@ interface GameState {
     setIsDebugMode: (v: boolean) => void;
     addIncomingEnemy: (enemy: any) => void;
     clearIncomingEnemies: () => void;
+    debugGridClearSignal: number;
+    triggerDebugGridClear: () => void;
 }
 
 const GameContext = createContext<GameState | undefined>(undefined);
@@ -95,6 +97,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const [pendingPuzzlePieces, setPendingPuzzlePieces] = useState<number[]>([]);
     const [isDebugMode, setIsDebugMode] = useState<boolean>(false);
+    const [debugGridClearSignal, setDebugGridClearSignal] = useState<number>(0);
+    const triggerDebugGridClear = React.useCallback(() => setDebugGridClearSignal(v => v + 1), []);
 
     // 共有PIXIアプリ
     const pixiAppRef = React.useRef<any | null>(null);
@@ -350,7 +354,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             expectedSummons, setExpectedSummons,
             fieldWidth, incomingEnemies, generateWave, currentPattern, setPattern,
             pixiAppRef, pixiAppVersion, registerPixiApp,
-            isDebugMode, setIsDebugMode, addIncomingEnemy, clearIncomingEnemies
+            isDebugMode, setIsDebugMode, addIncomingEnemy, clearIncomingEnemies,
+            debugGridClearSignal, triggerDebugGridClear
         }}>
             {children}
         </GameContext.Provider>
