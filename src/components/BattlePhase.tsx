@@ -3,6 +3,7 @@ import { useGame } from '../contexts/GameContext';
 import { BOARD_WIDTH } from '../game/config';
 import DefensePhase from './DefensePhase';
 import RitualPhase from './RitualPhase';
+import DebugPanel from './DebugPanel';
 
 const LEFT_PANEL_WIDTH = 260;
 
@@ -10,7 +11,7 @@ const LEFT_PANEL_WIDTH = 260;
 const MAX_WAVES = 1;
 
 const BattlePhase: React.FC = () => {
-    const { phase, fieldWidth, incomingEnemies } = useGame();
+    const { phase, fieldWidth, incomingEnemies, isDebugMode } = useGame();
     const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -50,18 +51,20 @@ const BattlePhase: React.FC = () => {
                         flexDirection: 'column',
                     }}
                 >
-                    {phase === 'RITUAL'
-                        ? <div id="ritual-panel-slot" style={{ width: '100%', height: '100%' }} />
-                        : <div style={{ padding: '14px 12px', color: '#ccc', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <div style={{ color: '#ff6666', fontWeight: 'bold', fontSize: '16px', borderBottom: '1px solid #2a1040', paddingBottom: '6px' }}>⚔️ 戦況</div>
-                            <div>🌊 WAVE {uiState.wave} / {MAX_WAVES}</div>
-                            <div style={{ color: '#aaffaa' }}>👿 自軍: {uiState.demonCount}</div>
-                            <div style={{ color: '#ffaaaa' }}>🗡️ 敵軍: {uiState.heroCount}</div>
-                            <div style={{ color: '#ff88ff' }}>💀 撃破: {uiState.killCount}</div>
-                            {uiState.nextWaveIn > 0 && uiState.wave < MAX_WAVES && (
-                                <div style={{ color: '#ffff44' }}>次WAVE: {uiState.nextWaveIn.toFixed(1)}s</div>
-                            )}
-                        </div>
+                    {phase === 'RITUAL' && isDebugMode
+                        ? <DebugPanel />
+                        : phase === 'RITUAL'
+                            ? <div id="ritual-panel-slot" style={{ width: '100%', height: '100%' }} />
+                            : <div style={{ padding: '14px 12px', color: '#ccc', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ color: '#ff6666', fontWeight: 'bold', fontSize: '16px', borderBottom: '1px solid #2a1040', paddingBottom: '6px' }}>⚔️ 戦況</div>
+                                <div>🌊 WAVE {uiState.wave} / {MAX_WAVES}</div>
+                                <div style={{ color: '#aaffaa' }}>👿 自軍: {uiState.demonCount}</div>
+                                <div style={{ color: '#ffaaaa' }}>🗡️ 敵軍: {uiState.heroCount}</div>
+                                <div style={{ color: '#ff88ff' }}>💀 撃破: {uiState.killCount}</div>
+                                {uiState.nextWaveIn > 0 && uiState.wave < MAX_WAVES && (
+                                    <div style={{ color: '#ffff44' }}>次WAVE: {uiState.nextWaveIn.toFixed(1)}s</div>
+                                )}
+                            </div>
                     }
                 </div>
 
@@ -75,8 +78,8 @@ const BattlePhase: React.FC = () => {
                         <DefensePhase onStateChange={setUiState} />
                     </div>
 
-                    {/* 儀式フェーズ：コンボ演出オーバーレイ */}
-                    {phase === 'RITUAL' && (
+                    {/* 儀式フェーズ：コンボ演出オーバーレイ（デバッグモード時は非表示） */}
+                    {phase === 'RITUAL' && !isDebugMode && (
                         <div style={{
                             position: 'absolute', left: 0, top: 0,
                             width: `${BOARD_WIDTH}px`, height: '100%',
@@ -88,8 +91,8 @@ const BattlePhase: React.FC = () => {
                 </div>
             </div>
 
-            {/* 儀式アクションバー（APゲージ・召喚・スキル） */}
-            {phase === 'RITUAL' && (
+            {/* 儀式アクションバー（APゲージ・召喚・スキル）※デバッグモード時は非表示 */}
+            {phase === 'RITUAL' && !isDebugMode && (
                 <div style={{
                     height: '110px', flexShrink: 0,
                     display: 'flex', background: '#0a0812',

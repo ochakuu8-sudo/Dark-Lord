@@ -5,7 +5,22 @@ import ResponsiveWrapper from './components/ResponsiveWrapper';
 import './App.css';
 
 const GameController: React.FC = () => {
-  const { phase, setPhase, resetGame } = useGame();
+  const { phase, setPhase, resetGame, isDebugMode, setIsDebugMode, unlockRecipe, addEquippedRecipe } = useGame();
+
+  const startNormalGame = () => {
+    setIsDebugMode(false);
+    setPhase('RITUAL');
+  };
+
+  const startDebugMode = () => {
+    setIsDebugMode(true);
+    // デバッグ時は全レシピを解放
+    ['orc', 'skeleton', 'wizard', 'necromancer', 'wisp'].forEach(id => {
+      unlockRecipe(id);
+      addEquippedRecipe(id);
+    });
+    setPhase('RITUAL');
+  };
 
   return (
     <div className="game-wrapper">
@@ -13,15 +28,40 @@ const GameController: React.FC = () => {
         <div className="title-screen">
           <h1>魔王軍の防衛儀式</h1>
           <p>パズルで魔物を召喚し、迫りくる勇者を撃退せよ</p>
-          <button className="start-btn" onClick={() => setPhase('RITUAL')}>ゲーム開始</button>
+          <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button className="start-btn" onClick={startNormalGame}>ゲーム開始</button>
+            <button
+              className="start-btn"
+              onClick={startDebugMode}
+              style={{
+                background: 'linear-gradient(135deg, #006600, #003300)',
+                borderColor: '#0f0',
+                fontSize: '22px',
+                padding: '20px 40px',
+              }}
+            >
+              🔧 デバッグモード
+            </button>
+          </div>
         </div>
       )}
       {(phase === 'RITUAL' || phase === 'BATTLE') && <BattlePhase />}
       {phase === 'RESULT' && (
         <div className="result-screen">
-          <h1>拠点陥落...</h1>
-          <p>魔王の城は勇者たちの手に落ちた。</p>
-          <button className="restart-btn" onClick={() => { resetGame(); setPhase('TITLE'); }}>もう一度最初から</button>
+          <h1>{isDebugMode ? '戦闘終了' : '拠点陥落...'}</h1>
+          <p>{isDebugMode ? 'デバッグ戦闘が終了しました。' : '魔王の城は勇者たちの手に落ちた。'}</p>
+          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {isDebugMode && (
+              <button
+                className="restart-btn"
+                style={{ background: 'linear-gradient(135deg, #006600, #003300)', borderColor: '#0f0', fontSize: '20px' }}
+                onClick={() => { setIsDebugMode(true); setPhase('RITUAL'); }}
+              >
+                🔧 デバッグに戻る
+              </button>
+            )}
+            <button className="restart-btn" onClick={() => { resetGame(); setPhase('TITLE'); }}>タイトルへ</button>
+          </div>
         </div>
       )}
     </div>

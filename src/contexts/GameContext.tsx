@@ -6,6 +6,8 @@ import type { HeroType } from '../game/entities';
 
 export type GamePhase = 'TITLE' | 'RITUAL' | 'BATTLE' | 'RESULT';
 
+
+
 export interface SummonedUnit {
     id: string;      // 個体識別用
     type: string;    // 'orc_bone' 等
@@ -61,6 +63,12 @@ interface GameState {
     pixiAppRef: React.MutableRefObject<any | null>;
     pixiAppVersion: number; // アプリ初期化/破棄時にインクリメント
     registerPixiApp: (app: any | null) => void;
+
+    // デバッグモード
+    isDebugMode: boolean;
+    setIsDebugMode: (v: boolean) => void;
+    addIncomingEnemy: (enemy: any) => void;
+    clearIncomingEnemies: () => void;
 }
 
 const GameContext = createContext<GameState | undefined>(undefined);
@@ -86,6 +94,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [currentPattern, setPattern] = useState<string>('random');
 
     const [pendingPuzzlePieces, setPendingPuzzlePieces] = useState<number[]>([]);
+    const [isDebugMode, setIsDebugMode] = useState<boolean>(false);
 
     // 共有PIXIアプリ
     const pixiAppRef = React.useRef<any | null>(null);
@@ -164,6 +173,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const saveRitualGrid = React.useCallback((grid: (any | null)[][]) => {
         setRitualGrid(grid);
+    }, []);
+
+    const addIncomingEnemy = React.useCallback((enemy: any) => {
+        setIncomingEnemies(prev => [...prev, enemy]);
+    }, []);
+
+    const clearIncomingEnemies = React.useCallback(() => {
+        setIncomingEnemies([]);
     }, []);
 
     const generateWave = React.useCallback((day: number, patternId?: string) => {
@@ -316,6 +333,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setRitualGrid([]);
         setExpectedSummons([]);
         setIncomingEnemies([]);
+        setIsDebugMode(false);
     }, []);
 
     return (
@@ -331,7 +349,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             pendingPuzzlePieces, addPendingPuzzlePiece, consumePendingPuzzlePieces,
             expectedSummons, setExpectedSummons,
             fieldWidth, incomingEnemies, generateWave, currentPattern, setPattern,
-            pixiAppRef, pixiAppVersion, registerPixiApp
+            pixiAppRef, pixiAppVersion, registerPixiApp,
+            isDebugMode, setIsDebugMode, addIncomingEnemy, clearIncomingEnemies
         }}>
             {children}
         </GameContext.Provider>
