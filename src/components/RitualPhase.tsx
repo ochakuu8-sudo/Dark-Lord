@@ -43,7 +43,7 @@ const RitualPhase: React.FC = () => {
         expectedSummons,
         fieldWidth,
         pixiAppRef, pixiAppVersion,
-        generateWave,
+        generateWave, currentPattern, setPattern,
         equippedRecipes, addEquippedRecipe,
         ownedRelics, addRelic,
         money, addMoney, spendMoney,
@@ -317,8 +317,8 @@ const RitualPhase: React.FC = () => {
                 if (!appRef.current) return;
                 const canvas = appRef.current.view as HTMLCanvasElement;
                 const rect0 = canvas.getBoundingClientRect();
-                const scaleX0 = ((appRef.current as any)?.renderer?.width ?? rect0.width) / rect0.width;
-                const scaleY0 = ((appRef.current as any)?.renderer?.height ?? rect0.height) / rect0.height;
+                const scaleX0 = ((appRef.current as any)?.screen?.width ?? rect0.width) / rect0.width;
+                const scaleY0 = ((appRef.current as any)?.screen?.height ?? rect0.height) / rect0.height;
                 let rafId0: number | null = null;
                 setIsDraggingSummoned(true);
                 const onPointerMove = (e: PointerEvent) => {
@@ -471,8 +471,8 @@ const RitualPhase: React.FC = () => {
             const canvas = appRef.current.view as HTMLCanvasElement;
             // getBoundingClientRect はドラッグ開始時に1回だけ取得
             const rect = canvas.getBoundingClientRect();
-            const scaleX = ((appRef.current as any)?.renderer?.width ?? rect.width) / rect.width;
-            const scaleY = ((appRef.current as any)?.renderer?.height ?? rect.height) / rect.height;
+            const scaleX = ((appRef.current as any)?.screen?.width ?? rect.width) / rect.width;
+            const scaleY = ((appRef.current as any)?.screen?.height ?? rect.height) / rect.height;
 
             let rafId: number | null = null;
             const onPointerMove = (moveEvent: PointerEvent) => {
@@ -1199,6 +1199,49 @@ const RitualPhase: React.FC = () => {
                     </div>
                 );
             })()}
+
+            {/* ───── デバッグ: 敵軍パターン選択 ───── */}
+            {import.meta.env.DEV && (
+                <div style={{
+                    position: 'fixed', bottom: 12, right: 12, zIndex: 9999,
+                    background: 'rgba(0,0,0,0.85)', border: '1px solid #444',
+                    borderRadius: '8px', padding: '8px 12px',
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    fontSize: '11px', color: '#aaa',
+                }}>
+                    <span style={{ color: '#ff8844', fontWeight: 'bold' }}>🛠 DEV</span>
+                    <span>敵軍:</span>
+                    <select
+                        value={currentPattern}
+                        onChange={e => setPattern(e.target.value)}
+                        style={{
+                            background: '#1a1a2e', color: '#ccc',
+                            border: '1px solid #555', borderRadius: '4px',
+                            padding: '2px 4px', fontSize: '11px', cursor: 'pointer',
+                        }}
+                    >
+                        <option value="random">ランダム（day依存）</option>
+                        <option value="turtle">① 亀甲陣</option>
+                        <option value="swarm">② 雪崩</option>
+                        <option value="archer_wall">③ 弓兵殲滅陣</option>
+                        <option value="vip_guard">④ 精鋭護衛隊（day4+）</option>
+                        <option value="lane_rush">⑤ 縦割り突撃</option>
+                        <option value="priest_loop">⑥ 支援完結型</option>
+                        <option value="phased">⑦ 波状攻撃</option>
+                        <option value="speed_rush">⑧ 奇襲隊</option>
+                    </select>
+                    <button
+                        onClick={() => generateWave(currentDay, currentPattern)}
+                        style={{
+                            background: '#2a1a3e', color: '#cc88ff',
+                            border: '1px solid #664488', borderRadius: '4px',
+                            padding: '2px 10px', fontSize: '11px', cursor: 'pointer',
+                        }}
+                    >
+                        適用
+                    </button>
+                </div>
+            )}
 
             {/* ───── ポータル描画 ───── */}
             {panelSlot && ReactDOM.createPortal(leftPanel, panelSlot)}

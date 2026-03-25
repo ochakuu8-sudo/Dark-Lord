@@ -10,7 +10,7 @@ const LEFT_PANEL_WIDTH = 260;
 const MAX_WAVES = 1;
 
 const BattlePhase: React.FC = () => {
-    const { setPhase, phase, fieldWidth, incomingEnemies } = useGame();
+    const { phase, fieldWidth, incomingEnemies } = useGame();
     const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -121,16 +121,6 @@ const BattlePhase: React.FC = () => {
                 {uiState.wave >= MAX_WAVES && uiState.heroCount === 0 && uiState.wave > 0 && (
                     <span style={{ color: '#44ffcc', fontWeight: 'bold' }}>⚔ 全WAVE撃退！</span>
                 )}
-                <button
-                    onClick={() => { if (confirm("戦闘を中断しますか？")) setPhase('PREPARATION'); }}
-                    style={{
-                        marginLeft: 'auto', background: 'transparent', color: '#664444',
-                        border: '1px solid #331111', padding: '3px 10px',
-                        borderRadius: '4px', cursor: 'pointer', fontSize: '11px'
-                    }}
-                >
-                    撤退
-                </button>
             </div>
         </div>
     );

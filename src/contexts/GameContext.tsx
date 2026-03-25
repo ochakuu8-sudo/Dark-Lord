@@ -53,7 +53,9 @@ interface GameState {
     expectedSummons: SummonedUnit[];
     setExpectedSummons: (units: SummonedUnit[]) => void;
     incomingEnemies: any[];
-    generateWave: (day: number) => void;
+    generateWave: (day: number, patternId?: string) => void;
+    currentPattern: string;
+    setPattern: (id: string) => void;
 
     // 共有PIXIアプリ（DefensePhaseが所有、RitualPhaseが借用）
     pixiAppRef: React.MutableRefObject<any | null>;
@@ -81,6 +83,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [expectedSummons, setExpectedSummons] = useState<SummonedUnit[]>([]);
     const [fieldWidth, setFieldWidth] = useState<number>(BOARD_WIDTH + ENEMY_BOARD_WIDTH);
     const [incomingEnemies, setIncomingEnemies] = useState<any[]>([]);
+    const [currentPattern, setPattern] = useState<string>('random');
 
     const [pendingPuzzlePieces, setPendingPuzzlePieces] = useState<number[]>([]);
 
@@ -163,51 +166,142 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setRitualGrid(grid);
     }, []);
 
-    const generateWave = React.useCallback((day: number) => {
-        // 敵陣列(col): 0=最前衛(左/自陣に近い), 8=最後衛
-        const FORMATION: Record<string, number> = {
-            '重騎士': 0, 'パラディン': 0, '剣士': 1,
-            '村人': 1, '農夫': 2,
-            '弓兵': 5, '魔法使い': 6, '大魔道士': 7,
-        };
+    const generateWave = React.useCallback((day: number, patternId?: string) => {
+        type EnemyEntry = { id: string; type: string; row: number; col: number; isElite?: boolean; hpScale?: number };
 
-        const enemies = [];
-        const count = 6 + day * 3;
-
-        const usedPosByCol = new Map<number, Set<number>>();
-        const tankTypes: HeroType[] = day >= 3 ? ['剣士', '重騎士'] : ['村人', '農夫'];
-        const rangedTypes: HeroType[] = day >= 3 ? ['弓兵', '魔法使い'] : day >= 2 ? ['弓兵'] : [];
-
-        for (let i = 0; i < count; i++) {
-            const isTank = rangedTypes.length === 0 || i < Math.ceil(count * 2 / 3);
-            const type = isTank
-                ? tankTypes[Math.floor(Math.random() * tankTypes.length)]
-                : rangedTypes[Math.floor(Math.random() * rangedTypes.length)];
-            const col = FORMATION[type] ?? 4;
-            if (!usedPosByCol.has(col)) usedPosByCol.set(col, new Set());
-            const used = usedPosByCol.get(col)!;
-            const available = Array.from({length: ROWS}, (_, k) => k).filter(k => !used.has(k));
-            const row = available.length > 0
-                ? available[Math.floor(Math.random() * available.length)]
-                : Math.floor(Math.random() * ROWS);
+        // ユーティリティ: 列ごとに重複しない行をランダムに割り当てる
+        const usedByCol = new Map<number, Set<number>>();
+        const placeAt = (col: number): number => {
+            if (!usedByCol.has(col)) usedByCol.set(col, new Set());
+            const used = usedByCol.get(col)!;
+            const avail = Array.from({ length: ROWS }, (_, k) => k).filter(k => !used.has(k));
+            const row = avail.length > 0 ? avail[Math.floor(Math.random() * avail.length)] : Math.floor(Math.random() * ROWS);
             used.add(row);
-            enemies.push({
-                id: `e-${day}-${i}`,
-                type,
-                row,
-                col,
-                isElite: day >= 2 && Math.random() < 0.1
-            });
-        }
-        // ボスを最後列中央に固定配置（dayでHPスケール）
-        enemies.push({
-            id: `boss-${day}`,
-            type: 'ボス',
-            row: 4, // 9行中央
-            col: 8, // 9列最後衛
-            isElite: false,
-            hpScale: 1 + (day - 1) * 0.8, // Day1=1x, Day2=1.8x, Day3=2.6x...
+            return row;
+        };
+        const boss = (id: string, row = 4, col = 8): EnemyEntry => ({
+            id, type: 'ボス', row, col, isElite: false, hpScale: 1 + (day - 1) * 0.8
         });
+        const unit = (idx: number, type: HeroType, col: number, elite = false): EnemyEntry => ({
+            id: `e-${day}-${idx}`, type, row: placeAt(col), col, isElite: elite
+        });
+
+        // 利用可能パターン（day4未満はvip_guardを除外）
+        const available = ['turtle', 'swarm', 'archer_wall', 'lane_rush', 'priest_loop', 'phased', 'speed_rush'];
+        if (day >= 4) available.push('vip_guard');
+
+        const pid = (!patternId || patternId === 'random')
+            ? available[Math.floor(Math.random() * available.length)]
+            : patternId;
+
+        let enemies: EnemyEntry[] = [];
+
+        if (pid === 'turtle') {
+            // 亀甲陣: 重騎士/パラディンで前列密集＋後方プリースト
+            const count = 4 + day * 2;
+            for (let i = 0; i < count; i++) {
+                const col = i % 3; // col 0〜2
+                const type: HeroType = col === 0 ? 'パラディン' : '重騎士';
+                enemies.push(unit(i, type, col));
+            }
+            const priests = Math.min(2 + day, 4);
+            for (let i = 0; i < priests; i++) enemies.push(unit(100 + i, 'プリースト', 6 + (i % 2)));
+            enemies.push(boss(`boss-${day}`));
+
+        } else if (pid === 'swarm') {
+            // 雪崩: 農夫・村人の大量配置
+            const count = 10 + day * 4;
+            for (let i = 0; i < count; i++) {
+                const type: HeroType = Math.random() < 0.5 ? '農夫' : '村人';
+                const col = Math.floor(Math.random() * 5); // col 0〜4
+                enemies.push(unit(i, type, col, day >= 2 && Math.random() < 0.1));
+            }
+            enemies.push(boss(`boss-${day}`, 0, 8));
+
+        } else if (pid === 'archer_wall') {
+            // 弓兵殲滅陣: 後衛に弓兵・魔法使い密集
+            enemies.push(unit(0, '村人', 0)); // 前衛1体だけ
+            const rangedCount = 4 + day * 2;
+            for (let i = 0; i < rangedCount; i++) {
+                const types: HeroType[] = day >= 3 ? ['弓兵', '魔法使い', '大魔道士'] : ['弓兵', '魔法使い'];
+                const type = types[Math.floor(Math.random() * types.length)];
+                const col = 5 + (i % 3); // col 5〜7
+                enemies.push(unit(i + 1, type, col));
+            }
+            enemies.push(boss(`boss-${day}`));
+
+        } else if (pid === 'vip_guard') {
+            // 精鋭護衛隊: 勇者を聖騎士/重騎士が囲む
+            enemies.push({ id: `vip-${day}`, type: '勇者', row: 4, col: 4, hpScale: 1 + (day - 1) * 0.5 });
+            const guardPositions = [
+                [3,3],[4,3],[5,3],[3,4],[5,4],[3,5],[4,5],[5,5]
+            ];
+            guardPositions.forEach(([r, c], i) => {
+                const type: HeroType = i % 2 === 0 ? '聖騎士' : '重騎士';
+                enemies.push({ id: `guard-${day}-${i}`, type, row: r, col: c });
+            });
+
+        } else if (pid === 'lane_rush') {
+            // 縦割り突撃: 中央3行(3〜5)のみに集中
+            const count = 5 + day * 2;
+            for (let i = 0; i < count; i++) {
+                const row = 3 + (i % 3); // row 3,4,5
+                const col = i % 8;
+                const types: HeroType[] = ['剣士', '農夫', '弓兵'];
+                const type = types[Math.floor(Math.random() * types.length)];
+                enemies.push({ id: `e-${day}-${i}`, type, row, col });
+            }
+            enemies.push(boss(`boss-${day}`, 4, 8));
+
+        } else if (pid === 'priest_loop') {
+            // 支援完結型: プリースト縦列＋聖騎士タンク
+            const priestCount = Math.min(3 + day, 5);
+            for (let i = 0; i < priestCount; i++) enemies.push(unit(i, 'プリースト', 4 + (i % 3)));
+            const knightCount = 2 + Math.floor(day / 2);
+            for (let i = 0; i < knightCount; i++) enemies.push(unit(100 + i, '聖騎士', i % 3));
+            enemies.push(boss(`boss-${day}`));
+
+        } else if (pid === 'phased') {
+            // 波状攻撃: タンク→中衛→後衛の3層
+            const perLayer = 2 + day;
+            for (let i = 0; i < perLayer; i++) {
+                const t: HeroType = Math.random() < 0.5 ? '重騎士' : 'パラディン';
+                enemies.push(unit(i, t, i % 3));
+            }
+            for (let i = 0; i < perLayer; i++) {
+                const t: HeroType = Math.random() < 0.5 ? '剣士' : '農夫';
+                enemies.push(unit(perLayer + i, t, 3 + (i % 3)));
+            }
+            for (let i = 0; i < perLayer; i++) {
+                const t: HeroType = Math.random() < 0.5 ? '弓兵' : '魔法使い';
+                enemies.push(unit(perLayer * 2 + i, t, 6 + (i % 2)));
+            }
+            enemies.push(boss(`boss-${day}`));
+
+        } else if (pid === 'speed_rush') {
+            // 奇襲隊: 農夫・剣士のみ col 0〜3 に大量展開
+            const count = 6 + day * 3;
+            for (let i = 0; i < count; i++) {
+                const type: HeroType = Math.random() < 0.6 ? '農夫' : '剣士';
+                enemies.push(unit(i, type, i % 4, day >= 2 && Math.random() < 0.15));
+            }
+            enemies.push(boss(`boss-${day}`, 8, 8));
+
+        } else {
+            // フォールバック: 従来のランダム編成
+            const count = 6 + day * 3;
+            const tankTypes: HeroType[] = day >= 3 ? ['剣士', '重騎士'] : ['村人', '農夫'];
+            const rangedTypes: HeroType[] = day >= 3 ? ['弓兵', '魔法使い'] : day >= 2 ? ['弓兵'] : [];
+            for (let i = 0; i < count; i++) {
+                const isTank = rangedTypes.length === 0 || i < Math.ceil(count * 2 / 3);
+                const types = isTank ? tankTypes : rangedTypes;
+                const type = types[Math.floor(Math.random() * types.length)];
+                const FORMATION: Record<string, number> = { '重騎士': 0, 'パラディン': 0, '剣士': 1, '村人': 1, '農夫': 2, '弓兵': 5, '魔法使い': 6, '大魔道士': 7 };
+                enemies.push(unit(i, type, FORMATION[type] ?? 4, day >= 2 && Math.random() < 0.1));
+            }
+            enemies.push(boss(`boss-${day}`));
+        }
+
         setIncomingEnemies(enemies);
     }, []);
 
@@ -236,7 +330,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             resetGame,
             pendingPuzzlePieces, addPendingPuzzlePiece, consumePendingPuzzlePieces,
             expectedSummons, setExpectedSummons,
-            fieldWidth, incomingEnemies, generateWave,
+            fieldWidth, incomingEnemies, generateWave, currentPattern, setPattern,
             pixiAppRef, pixiAppVersion, registerPixiApp
         }}>
             {children}
