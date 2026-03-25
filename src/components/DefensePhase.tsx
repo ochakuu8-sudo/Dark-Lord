@@ -390,7 +390,18 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         app.ticker.add((delta) => { updateLogic(delta); renderGraphics(); });
 
+        // タブ非表示時に ticker を停止し、復帰時に再開する（スマホでの離脱対策）
+        const handleVisibility = () => {
+            if (document.hidden) {
+                app.ticker.stop();
+            } else {
+                app.ticker.start();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+
         return () => {
+            document.removeEventListener('visibilitychange', handleVisibility);
             entityGfxPool.current.clear(); floatTextPool.current.clear();
             projSpritePool.current.forEach(s => s.destroy());
             projSpritePool.current.clear();
@@ -497,7 +508,9 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     };
 
     // ── Main logic ────────────────────────
-    const updateLogic = (delta: number) => {
+    const updateLogic = (rawDelta: number) => {
+        // タブ復帰時の巨大deltaによる一瞬勝利/敗北を防ぐため最大3フレーム分にクランプ
+        const delta = Math.min(rawDelta, 3);
         const s = stateRef.current;
         s.frameCount++;
 
