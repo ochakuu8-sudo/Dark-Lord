@@ -26,7 +26,6 @@ const DebugPanel: React.FC = () => {
     const {
         addPendingPuzzlePiece, triggerDebugGridClear,
         incomingEnemies, addIncomingEnemy, clearIncomingEnemies, generateWave,
-        setPhase,
     } = useGame();
 
     const [debugDay, setDebugDay] = useState(1);
@@ -185,27 +184,6 @@ const DebugPanel: React.FC = () => {
                         ))}
                     </div>
                 </div>
-            </div>
-
-            {/* フッター */}
-            <div style={{
-                flexShrink: 0, padding: '8px 10px',
-                borderTop: '1px solid #2a1040',
-                background: '#0a0812',
-                display: 'flex', flexDirection: 'column', gap: '6px',
-            }}>
-                <button
-                    onClick={() => setPhase('BATTLE')}
-                    style={{
-                        width: '100%',
-                        background: 'linear-gradient(to bottom, #aa0000, #660000)',
-                        color: '#fff', border: 'none', borderRadius: '5px',
-                        padding: '8px', fontSize: '14px', cursor: 'pointer',
-                        fontWeight: 'bold', letterSpacing: '1px',
-                    }}
-                >
-                    ⚔️ 戦闘開始
-                </button>
             </div>
         </div>
     );
