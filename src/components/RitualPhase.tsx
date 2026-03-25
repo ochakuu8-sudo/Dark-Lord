@@ -45,36 +45,96 @@ const RitualPhase: React.FC = () => {
         generateWave, currentPattern, setPattern,
         equippedRecipes, addEquippedRecipe,
         ownedRelics, addRelic,
-        money, addMoney, spendMoney,
+        money, addMoney,
         isDebugMode,
         pendingPuzzlePieces, consumePendingPuzzlePieces,
         debugGridClearSignal,
     } = useGame();
 
-    // レシピ選択オーバーレイ状態
-    const [offeredRecipes, setOfferedRecipes] = useState<Recipe[]>([]);
+    // ── ドラフト型定義 ──
+    type DraftDifficulty = 'easy' | 'normal' | 'hard';
+    interface DraftOption {
+        patternId: string;
+        patternName: string;
+        patternDesc: string;
+        difficulty: DraftDifficulty;
+        reward: { type: 'recipe'; recipe: Recipe } | { type: 'relic'; relic: Relic };
+    }
+
+    const PATTERN_META: Record<string, { name: string; desc: string; difficulty: DraftDifficulty }> = {
+        swarm:       { name: '雪崩',       desc: '農夫・村人が大挙して押し寄せる',       difficulty: 'easy' },
+        speed_rush:  { name: '奇襲隊',     desc: '農夫・剣士が高速突撃',                 difficulty: 'easy' },
+        archer_wall: { name: '弓兵殲滅陣', desc: '後方から遠距離攻撃の猛攻',             difficulty: 'normal' },
+        turtle:      { name: '亀甲陣',     desc: '重騎士+プリーストの硬い布陣',          difficulty: 'normal' },
+        lane_rush:   { name: '縦割り突撃', desc: '中央レーンに兵力を集中投入',           difficulty: 'normal' },
+        phased:      { name: '波状攻撃',   desc: 'タンク→中衛→遠距離の3層攻勢',         difficulty: 'normal' },
+        priest_loop: { name: '支援完結型', desc: 'プリーストによる永続回復編成',          difficulty: 'hard' },
+        vip_guard:   { name: '精鋭護衛隊', desc: '聖騎士に守られた勇者が直接攻撃',       difficulty: 'hard' },
+    };
+    const RECIPE_TIER: Record<string, 1 | 2 | 3> = {
+        orc: 1, wisp: 1, skeleton: 2, wizard: 2, necromancer: 3,
+    };
+    const DIFF_COLOR: Record<DraftDifficulty, string> = {
+        easy: '#44aa44', normal: '#ffaa00', hard: '#ff4444',
+    };
+    const DIFF_LABEL: Record<DraftDifficulty, string> = {
+        easy: '易', normal: '中', hard: '難',
+    };
+
+    // ドラフト状態
+    const [draftOptions, setDraftOptions] = useState<DraftOption[]>([]);
+    const [draftPicked, setDraftPicked] = useState(false);
     const [pickedRecipeId, setPickedRecipeId] = useState<string | null>(null);
     const [showRecipeSelect, setShowRecipeSelect] = useState(false);
-    const [offeredRelics, setOfferedRelics] = useState<Relic[]>([]);
 
-    // Day開始時: wave生成・レシピ選択オーバーレイ表示（Day2以降のみ）
+    // Day開始時: ドラフトオーバーレイ表示（Day2以降のみ）
     useEffect(() => {
         if (isDebugMode) {
-            // デバッグモード: wave自動生成・レシピ選択をスキップ
             setPickedRecipeId('debug');
             setShowRecipeSelect(false);
             return;
         }
-        generateWave(currentDay);
         setPickedRecipeId(null);
-        // レリックショップ更新（毎日3種ランダム）
-        const unowned = RELICS.filter(r => !ownedRelics.includes(r.id));
-        setOfferedRelics([...unowned].sort(() => 0.5 - Math.random()).slice(0, 3));
+        setDraftPicked(false);
         if (currentDay === 1) {
+            generateWave(currentDay);
             setShowRecipeSelect(false);
         } else {
-            const unequipped = ALL_RECIPES.filter(r => !equippedRecipes.includes(r.id));
-            setOfferedRecipes([...unequipped].sort(() => 0.5 - Math.random()).slice(0, 3));
+            // ドラフト選択肢を生成
+            const pick = (diff: DraftDifficulty): [string, typeof PATTERN_META[string]] => {
+                const candidates = Object.entries(PATTERN_META).filter(([, m]) => m.difficulty === diff);
+                const filtered = diff === 'hard' && currentDay < 4
+                    ? candidates.filter(([id]) => id !== 'vip_guard')
+                    : candidates;
+                const arr = filtered.length > 0 ? filtered : candidates;
+                return arr[Math.floor(Math.random() * arr.length)];
+            };
+            const rewardForDiff = (diff: DraftDifficulty): DraftOption['reward'] => {
+                const unequipped = ALL_RECIPES.filter(r => !equippedRecipes.includes(r.id));
+                if (diff === 'easy') {
+                    const pool = unequipped.filter(r => RECIPE_TIER[r.id] === 1);
+                    const p = pool.length > 0 ? pool : unequipped;
+                    if (p.length > 0) return { type: 'recipe', recipe: p[Math.floor(Math.random() * p.length)] };
+                }
+                if (diff === 'normal') {
+                    const pool = unequipped.filter(r => RECIPE_TIER[r.id] === 2);
+                    const p = pool.length > 0 ? pool : unequipped;
+                    if (p.length > 0) return { type: 'recipe', recipe: p[Math.floor(Math.random() * p.length)] };
+                }
+                if (diff === 'hard') {
+                    const pool = unequipped.filter(r => RECIPE_TIER[r.id] === 3);
+                    if (pool.length > 0) return { type: 'recipe', recipe: pool[Math.floor(Math.random() * pool.length)] };
+                }
+                const unownedRelics = RELICS.filter(r => !ownedRelics.includes(r.id));
+                if (unownedRelics.length > 0) return { type: 'relic', relic: unownedRelics[Math.floor(Math.random() * unownedRelics.length)] };
+                const fallback = unequipped;
+                return { type: 'recipe', recipe: fallback[Math.floor(Math.random() * fallback.length)] ?? ALL_RECIPES[0] };
+            };
+            const options: DraftOption[] = (['easy', 'normal', 'hard'] as DraftDifficulty[]).map(diff => {
+                const [patternId, meta] = pick(diff);
+                return { patternId, patternName: meta.name, patternDesc: meta.desc, difficulty: diff, reward: rewardForDiff(diff) };
+            });
+            setDraftOptions(options);
             setShowRecipeSelect(true);
         }
     }, [currentDay]);
@@ -994,149 +1054,154 @@ const RitualPhase: React.FC = () => {
         </div>
     );
 
-    // ───── SHOPオーバーレイ ─────
+    // ───── ドラフト選択オーバーレイ ─────
     const MATERIAL_NAMES: Record<number, string> = { 0: '骨', 1: '肉', 2: '霊' };
+
+    const handlePickDraft = (option: DraftOption) => {
+        if (option.reward.type === 'recipe') {
+            addEquippedRecipe(option.reward.recipe.id);
+            setPickedRecipeId(option.reward.recipe.id);
+        } else {
+            addRelic(option.reward.relic.id);
+            setPickedRecipeId('relic-picked');
+        }
+        generateWave(currentDay, option.patternId);
+        setDraftPicked(true);
+    };
+
     const recipeSelectOverlay = showRecipeSelect && (
         <div style={{
             position: 'fixed', inset: 0, zIndex: 9999,
             background: 'rgba(4, 2, 12, 0.97)',
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
-            padding: '24px 32px', gap: '0',
+            padding: '20px 24px', gap: '0',
         }}>
             {/* ヘッダー */}
-            <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                width: '100%', maxWidth: '860px', marginBottom: '20px',
-            }}>
-                <div>
-                    <div style={{ fontSize: '10px', color: '#554466', letterSpacing: '4px' }}>DAY {currentDay}</div>
-                    <div style={{ fontSize: '22px', color: '#ccaaff', fontWeight: 'bold', letterSpacing: '3px' }}>SHOP</div>
-                </div>
-                <div style={{
-                    background: '#1a1228', border: '1px solid #3a2040',
-                    borderRadius: '8px', padding: '8px 16px',
-                    fontSize: '18px', color: '#ffd700', fontWeight: 'bold',
+            <div style={{ textAlign: 'center', marginBottom: '18px' }}>
+                <div style={{ fontSize: '11px', color: '#554466', letterSpacing: '4px' }}>DAY {currentDay}</div>
+                <div style={{ fontSize: '20px', color: '#ccaaff', fontWeight: 'bold', letterSpacing: '3px' }}>ミッション選択</div>
+                <div style={{ fontSize: '10px', color: '#664488', marginTop: '4px' }}>敵編成を選んで報酬を獲得せよ</div>
+            </div>
+
+            {/* 3枚のドラフトカード */}
+            <div style={{ display: 'flex', gap: '14px', width: '100%', maxWidth: '860px' }}>
+                {draftOptions.map((opt, idx) => {
+                    const col = DIFF_COLOR[opt.difficulty];
+                    const isPicked = draftPicked && (
+                        opt.reward.type === 'recipe'
+                            ? pickedRecipeId === opt.reward.recipe.id
+                            : pickedRecipeId === 'relic-picked'
+                    );
+                    const isDisabled = draftPicked && !isPicked;
+                    return (
+                        <div
+                            key={idx}
+                            onClick={() => { if (!draftPicked) handlePickDraft(opt); }}
+                            style={{
+                                flex: 1,
+                                background: isPicked ? `${col}18` : isDisabled ? '#080612' : '#0e0820',
+                                border: `2px solid ${isPicked ? col : isDisabled ? '#221133' : col + '88'}`,
+                                borderRadius: '12px',
+                                padding: '14px 12px',
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                                cursor: isDisabled ? 'default' : 'pointer',
+                                opacity: isDisabled ? 0.35 : 1,
+                                transition: 'border-color 0.12s, opacity 0.12s',
+                            }}
+                        >
+                            {/* 難易度バッジ */}
+                            <div style={{
+                                background: col + '33', border: `1px solid ${col}`,
+                                borderRadius: '4px', padding: '2px 10px',
+                                fontSize: '11px', fontWeight: 'bold', color: col,
+                                letterSpacing: '2px',
+                            }}>
+                                {DIFF_LABEL[opt.difficulty]}
+                            </div>
+
+                            {/* 敵パターン名 */}
+                            <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#ddbbff', textAlign: 'center' }}>
+                                {isPicked && '✓ '}{opt.patternName}
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#886699', textAlign: 'center', lineHeight: 1.5 }}>
+                                {opt.patternDesc}
+                            </div>
+
+                            {/* 区切り */}
+                            <div style={{ width: '100%', borderTop: '1px solid #2a1040', margin: '2px 0' }} />
+
+                            {/* 報酬 */}
+                            <div style={{ fontSize: '10px', color: '#886699', letterSpacing: '1px' }}>報酬</div>
+                            {opt.reward.type === 'recipe' ? (() => {
+                                const recipe = opt.reward.recipe;
+                                const stats = UNIT_STATS[recipe.id];
+                                const materials = recipe.pattern.flat().filter(v => v >= 0 && v !== 9);
+                                const matCounts: Record<number, number> = {};
+                                materials.forEach(v => { matCounts[v] = (matCounts[v] ?? 0) + 1; });
+                                return (
+                                    <>
+                                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffddaa' }}>{recipe.name}</div>
+                                        <div style={{ width: '64px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <div style={{ display: 'grid', gap: '2px', gridTemplateColumns: `repeat(${recipe.pattern[0].length}, 18px)` }}>
+                                                {recipe.pattern.map((rowArr, ri) => rowArr.map((val, ci) => (
+                                                    <div key={`${ri}-${ci}`} style={{
+                                                        width: 18, height: 18, borderRadius: 2,
+                                                        backgroundColor: val === -1 ? 'transparent' : val === 9 ? '#333' : COLOR_HEX[val] ?? '#333',
+                                                        border: val !== -1 ? '1px solid #444' : 'none',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px',
+                                                    }}>{val === 9 ? '✕' : val >= 0 ? PIECE_EMOJIS[val] : ''}</div>
+                                                )))}
+                                            </div>
+                                        </div>
+                                        <div style={{ fontSize: '9px', color: '#776688', display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                            {Object.entries(matCounts).map(([k, cnt]) => (
+                                                <span key={k}>{PIECE_EMOJIS[Number(k)]}{MATERIAL_NAMES[Number(k)]}×{cnt}</span>
+                                            ))}
+                                        </div>
+                                        {stats && (
+                                            <div style={{ fontSize: '9px', color: '#8899aa', display: 'flex', gap: '8px' }}>
+                                                <span>❤️{stats.hp}</span><span>⚔️{stats.attack}</span><span>🏹{stats.range}</span>
+                                            </div>
+                                        )}
+                                        <div style={{ fontSize: '9px', color: '#886699', background: '#1a0a2a', border: '1px solid #3a1050', borderRadius: '4px', padding: '2px 8px' }}>
+                                            📜 レシピ
+                                        </div>
+                                    </>
+                                );
+                            })() : (() => {
+                                const relic = opt.reward.relic;
+                                return (
+                                    <>
+                                        <div style={{ fontSize: '28px', lineHeight: 1 }}>{relic.icon}</div>
+                                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#ccaaff', textAlign: 'center' }}>{relic.name}</div>
+                                        <div style={{ fontSize: '9px', color: '#664466', lineHeight: 1.5, textAlign: 'center' }}>{relic.description}</div>
+                                        <div style={{ fontSize: '9px', color: '#cc88ff', background: '#1a0a2a', border: '1px solid #550088', borderRadius: '4px', padding: '2px 8px' }}>
+                                            ✨ レリック
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* 進むボタン（選択後のみ有効） */}
+            <button
+                onClick={() => { if (draftPicked) setShowRecipeSelect(false); }}
+                disabled={!draftPicked}
+                style={{
+                    marginTop: '20px',
+                    padding: '11px 48px',
+                    background: draftPicked ? 'linear-gradient(135deg, #2a0808, #5a1212)' : '#100c18',
+                    color: draftPicked ? '#ffaaaa' : '#442233',
+                    border: `1px solid ${draftPicked ? '#662222' : '#220011'}`,
+                    borderRadius: '8px', fontSize: '13px', fontWeight: 'bold',
+                    cursor: draftPicked ? 'pointer' : 'not-allowed',
+                    letterSpacing: '2px',
                 }}>
-                    💰 {money} G
-                </div>
-            </div>
-
-            {/* メインコンテンツ：レシピ上段 ＋ レリック下段 */}
-            <div style={{ width: '100%', maxWidth: '860px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-                {/* レシピ section */}
-                <div style={{ background: 'rgba(20,10,35,0.8)', border: '1px solid #2a1040', borderRadius: '12px', padding: '16px 20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                        <span style={{ fontSize: '12px', color: '#886699', letterSpacing: '2px' }}>📜 新レシピ</span>
-                        <span style={{ fontSize: '10px', color: '#554466' }}>— 1つ選択</span>
-                        {pickedRecipeId && <span style={{ fontSize: '10px', color: '#66bb66', marginLeft: '4px' }}>✓ 選択済み</span>}
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                        {offeredRecipes.map(recipe => {
-                            const stats = UNIT_STATS[recipe.id];
-                            const materials = recipe.pattern.flat().filter(v => v >= 0 && v !== 9);
-                            const materialCounts: Record<number, number> = {};
-                            materials.forEach(v => { materialCounts[v] = (materialCounts[v] ?? 0) + 1; });
-                            const isPicked = pickedRecipeId === recipe.id;
-                            const isDisabled = pickedRecipeId !== null && !isPicked;
-                            return (
-                                <div key={recipe.id}
-                                    onClick={() => { if (!isDisabled) { addEquippedRecipe(recipe.id); setPickedRecipeId(recipe.id); } }}
-                                    onMouseEnter={e => { if (!isDisabled) (e.currentTarget as HTMLDivElement).style.borderColor = isPicked ? '#66cc66' : '#aa77ff'; }}
-                                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = isPicked ? '#44aa44' : isDisabled ? '#221133' : '#5533aa'; }}
-                                    style={{
-                                        background: isPicked ? '#081808' : isDisabled ? '#080612' : '#0e0820',
-                                        border: `2px solid ${isPicked ? '#44aa44' : isDisabled ? '#221133' : '#5533aa'}`,
-                                        borderRadius: '10px', padding: '14px 16px',
-                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                                        cursor: isDisabled ? 'default' : 'pointer',
-                                        opacity: isDisabled ? 0.35 : 1,
-                                        transition: 'border-color 0.12s',
-                                    }}>
-                                    <div style={{ fontSize: '14px', fontWeight: 'bold', color: isPicked ? '#88ff88' : '#ddbbff' }}>
-                                        {isPicked && '✓ '}{recipe.name}
-                                    </div>
-                                    {/* パターン固定サイズ枠 */}
-                                    <div style={{ width: '72px', height: '72px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <div style={{ display: 'grid', gap: '2px', gridTemplateColumns: `repeat(${recipe.pattern[0].length}, 20px)` }}>
-                                            {recipe.pattern.map((rowArr, ri) => rowArr.map((val, ci) => (
-                                                <div key={`${ri}-${ci}`} style={{
-                                                    width: 20, height: 20, borderRadius: 3,
-                                                    backgroundColor: val === -1 ? 'transparent' : val === 9 ? '#333' : COLOR_HEX[val] ?? '#333',
-                                                    border: val !== -1 ? '1px solid #444' : 'none',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px',
-                                                }}>{val === 9 ? '✕' : val >= 0 ? PIECE_EMOJIS[val] : ''}</div>
-                                            )))}
-                                        </div>
-                                    </div>
-                                    <div style={{ fontSize: '10px', color: '#776688', display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                                        {Object.entries(materialCounts).map(([k, cnt]) => (
-                                            <span key={k}>{PIECE_EMOJIS[Number(k)]}{MATERIAL_NAMES[Number(k)]}×{cnt}</span>
-                                        ))}
-                                    </div>
-                                    {stats && (
-                                        <div style={{ fontSize: '10px', color: '#8899aa', display: 'flex', gap: '10px' }}>
-                                            <span>❤️ {stats.hp}</span><span>⚔️ {stats.attack}</span><span>🏹 {stats.range}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* レリック section */}
-                <div style={{ background: 'rgba(20,10,35,0.8)', border: '1px solid #2a1040', borderRadius: '12px', padding: '16px 20px' }}>
-                    <div style={{ fontSize: '12px', color: '#886699', letterSpacing: '2px', marginBottom: '14px' }}>🏪 レリック</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                        {offeredRelics.map(relic => {
-                            const owned = ownedRelics.includes(relic.id);
-                            const canAfford = money >= relic.price;
-                            return (
-                                <div key={relic.id} style={{
-                                    background: owned ? '#081208' : '#0e0820',
-                                    border: `1px solid ${owned ? '#1a3a1a' : canAfford ? '#3a1858' : '#1a1030'}`,
-                                    borderRadius: '10px', padding: '14px 16px',
-                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-                                    opacity: owned ? 0.45 : 1,
-                                }}>
-                                    <div style={{ fontSize: '26px', lineHeight: 1 }}>{relic.icon}</div>
-                                    <div style={{ fontSize: '13px', color: '#ccaaff', fontWeight: 'bold', textAlign: 'center' }}>{relic.name}</div>
-                                    <div style={{ fontSize: '9px', color: '#664466', lineHeight: 1.5, textAlign: 'center', flex: 1 }}>{relic.description}</div>
-                                    <div style={{ fontSize: '14px', color: canAfford ? '#ffd700' : '#554400', fontWeight: 'bold', marginTop: '2px' }}>
-                                        {relic.price} G
-                                    </div>
-                                    <button
-                                        disabled={owned || !canAfford}
-                                        onClick={() => { if (spendMoney(relic.price)) addRelic(relic.id); }}
-                                        style={{
-                                            width: '100%', padding: '6px 0',
-                                            background: owned ? '#0d1a0d' : canAfford ? 'linear-gradient(135deg, #3a0a6a, #5a1a8a)' : '#100c18',
-                                            color: owned ? '#335533' : canAfford ? '#ddaaff' : '#332244',
-                                            border: `1px solid ${owned ? '#1a3a1a' : canAfford ? '#6622aa' : '#1a1030'}`,
-                                            borderRadius: '6px', fontSize: '11px', fontWeight: 'bold',
-                                            cursor: (owned || !canAfford) ? 'not-allowed' : 'pointer',
-                                        }}>
-                                        {owned ? '✓ 入手済み' : canAfford ? '購入する' : '所持金不足'}
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-
-            {/* 進むボタン */}
-            <button onClick={() => setShowRecipeSelect(false)} style={{
-                marginTop: '20px',
-                padding: '11px 48px',
-                background: 'linear-gradient(135deg, #2a0808, #5a1212)',
-                color: '#ffaaaa', border: '1px solid #662222',
-                borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer',
-                letterSpacing: '2px',
-            }}>
-                ⚔️ 儀式へ進む
+                {draftPicked ? '⚔️ 儀式へ進む' : 'カードを選択してください'}
             </button>
         </div>
     );
