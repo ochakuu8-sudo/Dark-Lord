@@ -69,6 +69,7 @@ interface GameState {
     setIsDebugMode: (v: boolean) => void;
     addIncomingEnemy: (enemy: any) => void;
     clearIncomingEnemies: () => void;
+    updateIncomingEnemy: (id: string, row: number, col: number) => void;
     debugGridClearSignal: number;
     triggerDebugGridClear: () => void;
 }
@@ -185,6 +186,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const clearIncomingEnemies = React.useCallback(() => {
         setIncomingEnemies([]);
+    }, []);
+
+    const updateIncomingEnemy = React.useCallback((id: string, row: number, col: number) => {
+        setIncomingEnemies(prev => prev.map(e => e.id === id ? { ...e, row, col } : e));
     }, []);
 
     const generateWave = React.useCallback((day: number, patternId?: string) => {
@@ -354,7 +359,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             expectedSummons, setExpectedSummons,
             fieldWidth, incomingEnemies, generateWave, currentPattern, setPattern,
             pixiAppRef, pixiAppVersion, registerPixiApp,
-            isDebugMode, setIsDebugMode, addIncomingEnemy, clearIncomingEnemies,
+            isDebugMode, setIsDebugMode, addIncomingEnemy, clearIncomingEnemies, updateIncomingEnemy,
             debugGridClearSignal, triggerDebugGridClear
         }}>
             {children}

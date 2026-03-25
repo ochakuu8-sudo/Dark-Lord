@@ -5,7 +5,7 @@ import { PixiPlugin } from 'gsap/PixiPlugin';
 import { useGame } from '../contexts/GameContext';
 import type { EntityState } from '../game/entities';
 import { UNIT_STATS, PASSIVE_DESCRIPTIONS } from '../game/entities';
-import { ROWS, BLOCK_SIZE as CFG_BLOCK_SIZE, BOARD_WIDTH, ALL_RECIPES } from '../game/config';
+import { ROWS, BLOCK_SIZE as CFG_BLOCK_SIZE, BOARD_WIDTH, ENEMY_COLS, ALL_RECIPES } from '../game/config';
 
 const MATERIAL_PREFIX: Record<string, string> = { bone: '骨', meat: '肉', spirit: '霊' };
 const getUnitDisplayName = (type: string): string => {
@@ -96,7 +96,8 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         summonedMonsters,
         currentDay, incrementDay, setPhase, phase,
         incomingEnemies, ownedRelics, addPendingPuzzlePiece,
-        expectedSummons, fieldWidth, registerPixiApp, ritualGrid
+        expectedSummons, fieldWidth, registerPixiApp, ritualGrid,
+        isDebugMode, updateIncomingEnemy,
     } = useGame();
     const spawnUnitFnRef = useRef<((type: string) => void) | null>(null);
     const pixiContainerRef = useRef<HTMLDivElement>(null);
@@ -115,6 +116,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
     const projTexturesRef = useRef<Map<string, PIXI.Texture>>(new Map());
     const projSpritePool = useRef<Map<string, PIXI.Sprite>>(new Map());
     const areaBatchRef = useRef<PIXI.Graphics | null>(null);
+
+    // デバッグ用ドラッグ状態
+    const dragStateRef = useRef<{ entityId: string } | null>(null);
+    const isDebugModeRef = useRef(isDebugMode);
+    const updateIncomingEnemyRef = useRef(updateIncomingEnemy);
 
     const stateRef = useRef({
         entities: [] as EntityState[],
@@ -137,6 +143,8 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
     useEffect(() => { stateRef.current.currentPhase = phase; }, [phase]);
     useEffect(() => { stateRef.current.currentIncomingEnemies = incomingEnemies; }, [incomingEnemies]);
+    useEffect(() => { isDebugModeRef.current = isDebugMode; }, [isDebugMode]);
+    useEffect(() => { updateIncomingEnemyRef.current = updateIncomingEnemy; }, [updateIncomingEnemy]);
 
     // RITUAL開始時に敵を実体スポーン（静止状態）
     useEffect(() => {
@@ -351,7 +359,35 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         app.stage.eventMode = 'static';
         app.stage.hitArea = new PIXI.Rectangle(0, 0, fieldWidth, FIELD_HEIGHT);
-        app.stage.on('pointerdown', () => setPinnedEntity(null));
+        app.stage.on('pointerdown', () => { if (!dragStateRef.current) setPinnedEntity(null); });
+
+        // デバッグ: 敵ドラッグ移動
+        const onStageMove = (e: PIXI.FederatedPointerEvent) => {
+            if (!dragStateRef.current) return;
+            const dragging = stateRef.current.entities.find(en => en.id === dragStateRef.current!.entityId);
+            if (!dragging) { dragStateRef.current = null; return; }
+            dragging.x = e.global.x;
+            dragging.y = e.global.y;
+        };
+        const onStageUp = () => {
+            if (!dragStateRef.current) return;
+            const entityId = dragStateRef.current.entityId;
+            const dragging = stateRef.current.entities.find(en => en.id === entityId);
+            if (dragging) {
+                const col = Math.max(0, Math.min(ENEMY_COLS - 1, Math.floor((dragging.x - BOARD_WIDTH) / BLOCK_SIZE)));
+                const row = Math.max(0, Math.min(ROWS - 1, Math.floor(dragging.y / BLOCK_SIZE)));
+                dragging.x = BOARD_WIDTH + col * BLOCK_SIZE + BLOCK_SIZE / 2;
+                dragging.y = row * BLOCK_SIZE + BLOCK_SIZE / 2;
+                updateIncomingEnemyRef.current(entityId, row, col);
+                const g = entityGfxPool.current.get(entityId);
+                if (g) g.cursor = 'grab';
+            }
+            dragStateRef.current = null;
+        };
+        app.stage.on('pointermove', onStageMove);
+        app.stage.on('pointerup', onStageUp);
+        app.stage.on('pointerupoutside', onStageUp);
+
         app.ticker.add((delta) => { updateLogic(delta); renderGraphics(); });
 
         return () => {
@@ -1131,11 +1167,21 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 g.addChild(new PIXI.Graphics());
 
                 // Interaction
-                g.eventMode = 'static'; g.cursor = 'pointer';
+                g.eventMode = 'static';
+                g.cursor = (ent.faction === 'HERO' && isDebugModeRef.current) ? 'grab' : 'pointer';
                 g.on('pointerdown', (e: PIXI.FederatedPointerEvent) => {
                     e.stopPropagation();
-                    setPinnedEntity(prev => prev?.id === ent.id ? null : ent);
-                    setPinnedPos({ x: e.global.x, y: e.global.y });
+                    if (
+                        ent.faction === 'HERO' &&
+                        isDebugModeRef.current &&
+                        stateRef.current.currentPhase === 'RITUAL'
+                    ) {
+                        dragStateRef.current = { entityId: ent.id };
+                        g!.cursor = 'grabbing';
+                    } else {
+                        setPinnedEntity(prev => prev?.id === ent.id ? null : ent);
+                        setPinnedPos({ x: e.global.x, y: e.global.y });
+                    }
                 });
 
                 // Summon Animation
@@ -1147,9 +1193,20 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
             g.x = ent.x; g.y = ent.y;
 
+            const isDraggingThis = dragStateRef.current?.entityId === ent.id;
+
+            // カーソル更新（デバッグ敵のみ grab/grabbing）
+            if (ent.faction === 'HERO' && isDebugModeRef.current) {
+                g.cursor = isDraggingThis ? 'grabbing' : 'grab';
+            }
+
             // Hit flash scale
             const flashFrames = stateRef.current.hitFlashMap[ent.id] || 0;
-            g.scale.set(flashFrames > 0 ? 1 + 0.3 * (flashFrames / 8) : 1);
+            if (isDraggingThis) {
+                g.scale.set(1.2);
+            } else {
+                g.scale.set(flashFrames > 0 ? 1 + 0.3 * (flashFrames / 8) : 1);
+            }
 
             // Dynamic HP Bar Update
             const hpBar = g.children[0] as PIXI.Graphics;
@@ -1181,7 +1238,10 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
 
             // Elite glow (alpha update only)
-            if (isElite) {
+            if (isDraggingThis) {
+                g.alpha = 0.75;
+                g.tint = 0xffffff;
+            } else if (isElite) {
                 const pulse = 0.5 + 0.5 * Math.sin(stateRef.current.frameCount * 0.15);
                 g.alpha = 0.85 + pulse * 0.15;
                 g.tint = 0xffd700;
