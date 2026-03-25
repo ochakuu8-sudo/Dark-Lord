@@ -6,7 +6,7 @@ import { useGame } from '../contexts/GameContext';
 import {
     COLORS, PIECE_EMOJIS, ALL_RECIPES,
     ROWS, COLS, BLOCK_SIZE, RECIPE_EMOJIS, MATERIAL_BG_COLORS, COLOR_HEX,
-    RELICS, type Recipe, type Relic
+    RELICS, RARITY_COLOR, RARITY_LABEL, type Recipe, type Relic
 } from '../game/config';
 import { UNIT_STATS, PASSIVE_DESCRIPTIONS } from '../game/entities';
 import type { SummonedUnit } from '../contexts/GameContext';
@@ -1164,8 +1164,8 @@ const RitualPhase: React.FC = () => {
                                                 <span>❤️{stats.hp}</span><span>⚔️{stats.attack}</span><span>🏹{stats.range}</span>
                                             </div>
                                         )}
-                                        <div style={{ fontSize: '9px', color: '#886699', background: '#1a0a2a', border: '1px solid #3a1050', borderRadius: '4px', padding: '2px 8px' }}>
-                                            📜 レシピ
+                                        <div style={{ fontSize: '9px', color: RARITY_COLOR[recipe.rarity], background: '#1a0a2a', border: `1px solid ${RARITY_COLOR[recipe.rarity]}88`, borderRadius: '4px', padding: '2px 8px', fontWeight: 'bold' }}>
+                                            📜 {RARITY_LABEL[recipe.rarity]}
                                         </div>
                                     </>
                                 );
@@ -1176,8 +1176,8 @@ const RitualPhase: React.FC = () => {
                                         <div style={{ fontSize: '28px', lineHeight: 1 }}>{relic.icon}</div>
                                         <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#ccaaff', textAlign: 'center' }}>{relic.name}</div>
                                         <div style={{ fontSize: '9px', color: '#664466', lineHeight: 1.5, textAlign: 'center' }}>{relic.description}</div>
-                                        <div style={{ fontSize: '9px', color: '#cc88ff', background: '#1a0a2a', border: '1px solid #550088', borderRadius: '4px', padding: '2px 8px' }}>
-                                            ✨ レリック
+                                        <div style={{ fontSize: '9px', color: RARITY_COLOR[relic.rarity], background: '#1a0a2a', border: `1px solid ${RARITY_COLOR[relic.rarity]}88`, borderRadius: '4px', padding: '2px 8px', fontWeight: 'bold' }}>
+                                            ✨ {RARITY_LABEL[relic.rarity]}
                                         </div>
                                     </>
                                 );

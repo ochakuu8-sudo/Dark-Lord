@@ -1,8 +1,25 @@
+export type Rarity = 'common' | 'rare' | 'epic' | 'legend';
+
+export const RARITY_LABEL: Record<Rarity, string> = {
+    common: 'コモン',
+    rare:   'レア',
+    epic:   'エピック',
+    legend: 'レジェンド',
+};
+
+export const RARITY_COLOR: Record<Rarity, string> = {
+    common: '#aaaaaa',
+    rare:   '#4488ff',
+    epic:   '#aa44ff',
+    legend: '#ffaa00',
+};
+
 export interface Recipe {
     id: string;      // 形状としてのID（例: 'melee', 'tank'）
     name: string;    // ロール名
     pattern: number[][]; // 0: 骨, 1: 肉, 2: 霊, 9: 変動スロット
     reward: number;  // 基本報酬AP
+    rarity: Rarity;
     resultMap?: Record<number, string>; // 変動スロットに入ったピース(0|1|2)に対応するユニットID
 }
 
@@ -15,6 +32,7 @@ export const ALL_RECIPES: Recipe[] = [
     {
         id: 'orc',
         name: 'オーク',
+        rarity: 'common',
         pattern: [
             [1, 1], // 肉 肉
             [1, 9]  // 肉 X
@@ -29,6 +47,7 @@ export const ALL_RECIPES: Recipe[] = [
     {
         id: 'skeleton',
         name: 'スケルトン',
+        rarity: 'common',
         pattern: [
             [0], // 骨
             [0], // 骨
@@ -45,6 +64,7 @@ export const ALL_RECIPES: Recipe[] = [
     {
         id: 'wizard',
         name: 'ウィザード',
+        rarity: 'rare',
         pattern: [
             [-1, 2, -1], //   霊
             [ 2, 9,  2], // 霊 X 霊
@@ -60,6 +80,7 @@ export const ALL_RECIPES: Recipe[] = [
     {
         id: 'necromancer',
         name: 'ネクロマンサー',
+        rarity: 'epic',
         pattern: [
             [ 2, 9,  2], // 霊 X 霊
             [-1, 0, -1], //   骨
@@ -75,6 +96,7 @@ export const ALL_RECIPES: Recipe[] = [
     {
         id: 'wisp',
         name: 'ウィスプ',
+        rarity: 'common',
         pattern: [
             [ 2, -1, -1], // 霊 .  .
             [-1,  9, -1], //  . X  .
@@ -141,11 +163,12 @@ export interface Relic {
     description: string;
     price: number;
     icon: string;
+    rarity: Rarity;
 }
 
 export const RELICS: Relic[] = [
-    { id: 'giant_heart', name: '巨人の心臓', description: '全魔物のHPが2倍になる。ただし移動速度が30%低下する。', price: 80, icon: '❤️' },
-    { id: 'fire_crown', name: '炎の王冠', description: '赤系ユニットの攻撃力が1.5倍になる。それ以外は0.8倍になる。', price: 80, icon: '👑' },
-    { id: 'mana_prism', name: 'マナの水晶', description: '自拠点の最大HPが半分になる代わりに、強力な魔法効果を得る。', price: 60, icon: '💎' },
-    { id: 'necromancer_guide', name: '死霊術師の手引き', description: '敵ユニット撃破時25%の確率でスケルトンが召喚される。', price: 100, icon: '📖' },
+    { id: 'giant_heart',       name: '巨人の心臓',       rarity: 'rare',  description: '全魔物のHPが2倍になる。ただし移動速度が30%低下する。',           price: 80,  icon: '❤️' },
+    { id: 'fire_crown',        name: '炎の王冠',          rarity: 'rare',  description: '赤系ユニットの攻撃力が1.5倍になる。それ以外は0.8倍になる。',       price: 80,  icon: '👑' },
+    { id: 'mana_prism',        name: 'マナの水晶',        rarity: 'epic',  description: '自拠点の最大HPが半分になる代わりに、強力な魔法効果を得る。',       price: 60,  icon: '💎' },
+    { id: 'necromancer_guide', name: '死霊術師の手引き',  rarity: 'epic',  description: '敵ユニット撃破時25%の確率でスケルトンが召喚される。',               price: 100, icon: '📖' },
 ];
