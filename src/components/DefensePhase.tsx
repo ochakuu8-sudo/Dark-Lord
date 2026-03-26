@@ -233,6 +233,8 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 maxCooldown: stats.maxCooldown!, color: stats.color!,
                 materialType: stats.materialType,
                 attackType: stats.attackType,
+                size: stats.size,
+                accuracy: stats.accuracy,
                 passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined
             });
         });
@@ -262,6 +264,8 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 maxCooldown: stats.maxCooldown!, color: stats.color!,
                 materialType: stats.materialType,
                 attackType: stats.attackType,
+                size: stats.size,
+                accuracy: stats.accuracy,
                 passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined
             };
             stateRef.current.entities.push(newEnt);
