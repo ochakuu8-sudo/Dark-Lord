@@ -94,6 +94,51 @@ export const ALL_RECIPES: Recipe[] = [
         }
     },
     {
+        id: 'gargoyle',
+        name: 'ガーゴイル',
+        rarity: 'common',
+        pattern: [
+            [0, -1], // 骨 ·
+            [9,  0], // X  骨
+        ],
+        reward: 1,
+        resultMap: {
+            0: 'gargoyle_bone',
+            1: 'gargoyle_meat',
+            2: 'gargoyle_spirit',
+        }
+    },
+    {
+        id: 'cerberus',
+        name: 'ケルベロス',
+        rarity: 'common',
+        pattern: [
+            [1, 9, 1], // 肉 X 肉
+        ],
+        reward: 1,
+        resultMap: {
+            0: 'cerberus_bone',
+            1: 'cerberus_meat',
+            2: 'cerberus_spirit',
+        }
+    },
+    {
+        id: 'wraith',
+        name: 'レイス',
+        rarity: 'rare',
+        pattern: [
+            [2, -1], // 霊 ·
+            [2,  9], // 霊 X
+            [2, -1], // 霊 ·
+        ],
+        reward: 2,
+        resultMap: {
+            0: 'wraith_bone',
+            1: 'wraith_meat',
+            2: 'wraith_spirit',
+        }
+    },
+    {
         id: 'wisp',
         name: 'ウィスプ',
         rarity: 'common',

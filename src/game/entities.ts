@@ -33,6 +33,21 @@ export const HERO_ROSTER: HeroType[] = [
 const DEMON_SPEED = 0.8;
 
 export const UNIT_STATS: Record<string, Partial<EntityState>> = {
+    // --- Gargoyle Derivations (Base: 骨2+X, コモン・中距離飛行) ---
+    'gargoyle_bone':   { maxHp: 700, attack: 80,  range: 150, speed: DEMON_SPEED,       maxCooldown: 50, color: 0xaaaacc, materialType: 0 },
+    'gargoyle_meat':   { maxHp: 500, attack: 110, range: 150, speed: DEMON_SPEED * 1.1, maxCooldown: 45, color: 0xff9999, materialType: 1 },
+    'gargoyle_spirit': { maxHp: 350, attack: 70,  range: 280, speed: DEMON_SPEED,       maxCooldown: 55, color: 0xcc88ff, materialType: 2 },
+
+    // --- Cerberus Derivations (Base: 肉2+X, コモン・高速近接) ---
+    'cerberus_bone':   { maxHp: 600, attack: 90,  range: 50, speed: DEMON_SPEED * 1.1, maxCooldown: 40, color: 0xddccaa, materialType: 0 },
+    'cerberus_meat':   { maxHp: 850, attack: 130, range: 50, speed: DEMON_SPEED * 1.2, maxCooldown: 35, color: 0xff7777, materialType: 1 },
+    'cerberus_spirit': { maxHp: 400, attack: 85,  range: 180, speed: DEMON_SPEED,      maxCooldown: 50, color: 0xbb88ff, materialType: 2 },
+
+    // --- Wraith Derivations (Base: 霊3+X, レア・遠距離浮遊) ---
+    'wraith_bone':   { maxHp: 550, attack: 130, range: 300, speed: DEMON_SPEED * 0.8, maxCooldown: 60, color: 0xeeeeff, materialType: 0 },
+    'wraith_meat':   { maxHp: 750, attack: 110, range: 200, speed: DEMON_SPEED * 0.8, maxCooldown: 55, color: 0xffaaaa, materialType: 1 },
+    'wraith_spirit': { maxHp: 350, attack: 160, range: 420, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xaa55ff, materialType: 2 },
+
     // --- Goblin Derivations (Base: 3マッチ雑魚・APループ燃料) ---
     'goblin_bone': { maxHp: 80,  attack: 15, range: 40, speed: DEMON_SPEED * 1.2, maxCooldown: 40, color: 0xaaaaaa, materialType: 0 },
     'goblin_meat': { maxHp: 120, attack: 20, range: 40, speed: DEMON_SPEED * 1.4, maxCooldown: 30, color: 0xff8888, materialType: 1 },
