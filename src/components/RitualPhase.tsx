@@ -1061,18 +1061,20 @@ const RitualPhase: React.FC = () => {
             position: 'fixed', inset: 0, zIndex: 9999,
             background: 'rgba(4, 2, 12, 0.97)',
             display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            padding: '20px 24px', gap: '0',
+            alignItems: 'center', justifyContent: 'flex-start',
+            overflowY: 'auto',
+            padding: '8px 10px',
+            gap: '6px',
+            boxSizing: 'border-box',
         }}>
             {/* ヘッダー */}
-            <div style={{ textAlign: 'center', marginBottom: '18px' }}>
-                <div style={{ fontSize: '11px', color: '#554466', letterSpacing: '4px' }}>DAY {currentDay}</div>
-                <div style={{ fontSize: '20px', color: '#ccaaff', fontWeight: 'bold', letterSpacing: '3px' }}>ミッション選択</div>
-                <div style={{ fontSize: '10px', color: '#664488', marginTop: '4px' }}>敵編成を選んで報酬を獲得せよ</div>
+            <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                <div style={{ fontSize: '9px', color: '#554466', letterSpacing: '3px' }}>DAY {currentDay}</div>
+                <div style={{ fontSize: '15px', color: '#ccaaff', fontWeight: 'bold', letterSpacing: '2px' }}>ミッション選択</div>
             </div>
 
             {/* 3枚のドラフトカード */}
-            <div style={{ display: 'flex', gap: '14px', width: '100%', maxWidth: '860px' }}>
+            <div style={{ display: 'flex', gap: '8px', width: '100%', maxWidth: '900px', flexShrink: 0 }}>
                 {draftOptions.map((opt, idx) => {
                     const col = DIFF_COLOR[opt.difficulty];
                     const isPicked = draftPicked && (
@@ -1089,102 +1091,107 @@ const RitualPhase: React.FC = () => {
                                 flex: 1,
                                 background: isPicked ? `${col}18` : isDisabled ? '#080612' : '#0e0820',
                                 border: `2px solid ${isPicked ? col : isDisabled ? '#221133' : col + '88'}`,
-                                borderRadius: '12px',
-                                padding: '14px 12px',
-                                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                                borderRadius: '10px',
+                                padding: '8px',
+                                display: 'flex', flexDirection: 'column', gap: '5px',
                                 cursor: isDisabled ? 'default' : 'pointer',
                                 opacity: isDisabled ? 0.35 : 1,
                                 transition: 'border-color 0.12s, opacity 0.12s',
                             }}
                         >
-                            {/* 難易度バッジ */}
-                            <div style={{
-                                background: col + '33', border: `1px solid ${col}`,
-                                borderRadius: '4px', padding: '2px 10px',
-                                fontSize: '11px', fontWeight: 'bold', color: col,
-                                letterSpacing: '2px',
-                            }}>
-                                {DIFF_LABEL[opt.difficulty]}
+                            {/* 難易度バッジ + 敵パターン名 */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <div style={{
+                                    background: col + '33', border: `1px solid ${col}`,
+                                    borderRadius: '3px', padding: '1px 6px',
+                                    fontSize: '10px', fontWeight: 'bold', color: col,
+                                    flexShrink: 0,
+                                }}>
+                                    {DIFF_LABEL[opt.difficulty]}
+                                </div>
+                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#ddbbff' }}>
+                                    {isPicked && '✓ '}{opt.patternName}
+                                </div>
                             </div>
-
-                            {/* 敵パターン名 */}
-                            <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#ddbbff', textAlign: 'center' }}>
-                                {isPicked && '✓ '}{opt.patternName}
-                            </div>
-                            <div style={{ fontSize: '10px', color: '#886699', textAlign: 'center', lineHeight: 1.5 }}>
+                            <div style={{ fontSize: '9px', color: '#886699', lineHeight: 1.4 }}>
                                 {opt.patternDesc}
                             </div>
 
                             {/* 区切り */}
-                            <div style={{ width: '100%', borderTop: '1px solid #2a1040', margin: '2px 0' }} />
+                            <div style={{ borderTop: '1px solid #2a1040' }} />
 
-                            {/* 報酬 */}
-                            <div style={{ fontSize: '10px', color: '#886699', letterSpacing: '1px' }}>報酬</div>
-                            {opt.reward.type === 'recipe' ? (() => {
-                                const recipe = opt.reward.recipe;
-                                const stats = UNIT_STATS[recipe.id];
-                                const materials = recipe.pattern.flat().filter(v => v >= 0 && v !== 9);
-                                const matCounts: Record<number, number> = {};
-                                materials.forEach(v => { matCounts[v] = (matCounts[v] ?? 0) + 1; });
-                                return (
-                                    <>
-                                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#ffddaa' }}>{recipe.name}</div>
-                                        <div style={{ width: '64px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            <div style={{ display: 'grid', gap: '2px', gridTemplateColumns: `repeat(${recipe.pattern[0].length}, 18px)` }}>
+                            {/* 報酬：左に情報、右にパターン/アイコン */}
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                {opt.reward.type === 'recipe' ? (() => {
+                                    const recipe = opt.reward.recipe;
+                                    const stats = UNIT_STATS[recipe.id];
+                                    const materials = recipe.pattern.flat().filter(v => v >= 0 && v !== 9);
+                                    const matCounts: Record<number, number> = {};
+                                    materials.forEach(v => { matCounts[v] = (matCounts[v] ?? 0) + 1; });
+                                    return (
+                                        <>
+                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+                                                <div style={{ fontSize: '9px', color: '#886699' }}>報酬レシピ</div>
+                                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#ffddaa' }}>{recipe.name}</div>
+                                                <div style={{ fontSize: '9px', color: RARITY_COLOR[recipe.rarity], fontWeight: 'bold' }}>
+                                                    📜 {RARITY_LABEL[recipe.rarity]}
+                                                </div>
+                                                {stats && (
+                                                    <div style={{ fontSize: '8px', color: '#8899aa', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                                        <span>❤️{stats.hp}</span><span>⚔️{stats.attack}</span><span>🏹{stats.range}</span>
+                                                    </div>
+                                                )}
+                                                <div style={{ fontSize: '8px', color: '#776688', display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                                                    {Object.entries(matCounts).map(([k, cnt]) => (
+                                                        <span key={k}>{PIECE_EMOJIS[Number(k)]}{MATERIAL_NAMES[Number(k)]}×{cnt}</span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'grid', gap: '2px', gridTemplateColumns: `repeat(${recipe.pattern[0].length}, 16px)`, flexShrink: 0 }}>
                                                 {recipe.pattern.map((rowArr, ri) => rowArr.map((val, ci) => (
                                                     <div key={`${ri}-${ci}`} style={{
-                                                        width: 18, height: 18, borderRadius: 2,
+                                                        width: 16, height: 16, borderRadius: 2,
                                                         backgroundColor: val === -1 ? 'transparent' : val === 9 ? '#333' : COLOR_HEX[val] ?? '#333',
                                                         border: val !== -1 ? '1px solid #444' : 'none',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px',
                                                     }}>{val === 9 ? '✕' : val >= 0 ? PIECE_EMOJIS[val] : ''}</div>
                                                 )))}
                                             </div>
-                                        </div>
-                                        <div style={{ fontSize: '9px', color: '#776688', display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                                            {Object.entries(matCounts).map(([k, cnt]) => (
-                                                <span key={k}>{PIECE_EMOJIS[Number(k)]}{MATERIAL_NAMES[Number(k)]}×{cnt}</span>
-                                            ))}
-                                        </div>
-                                        {stats && (
-                                            <div style={{ fontSize: '9px', color: '#8899aa', display: 'flex', gap: '8px' }}>
-                                                <span>❤️{stats.hp}</span><span>⚔️{stats.attack}</span><span>🏹{stats.range}</span>
+                                        </>
+                                    );
+                                })() : (() => {
+                                    const relic = opt.reward.relic;
+                                    return (
+                                        <>
+                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+                                                <div style={{ fontSize: '9px', color: '#886699' }}>報酬レリック</div>
+                                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#ccaaff' }}>{relic.name}</div>
+                                                <div style={{ fontSize: '9px', color: RARITY_COLOR[relic.rarity], fontWeight: 'bold' }}>
+                                                    ✨ {RARITY_LABEL[relic.rarity]}
+                                                </div>
+                                                <div style={{ fontSize: '8px', color: '#664466', lineHeight: 1.4 }}>{relic.description}</div>
                                             </div>
-                                        )}
-                                        <div style={{ fontSize: '9px', color: RARITY_COLOR[recipe.rarity], background: '#1a0a2a', border: `1px solid ${RARITY_COLOR[recipe.rarity]}88`, borderRadius: '4px', padding: '2px 8px', fontWeight: 'bold' }}>
-                                            📜 {RARITY_LABEL[recipe.rarity]}
-                                        </div>
-                                    </>
-                                );
-                            })() : (() => {
-                                const relic = opt.reward.relic;
-                                return (
-                                    <>
-                                        <div style={{ fontSize: '28px', lineHeight: 1 }}>{relic.icon}</div>
-                                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#ccaaff', textAlign: 'center' }}>{relic.name}</div>
-                                        <div style={{ fontSize: '9px', color: '#664466', lineHeight: 1.5, textAlign: 'center' }}>{relic.description}</div>
-                                        <div style={{ fontSize: '9px', color: RARITY_COLOR[relic.rarity], background: '#1a0a2a', border: `1px solid ${RARITY_COLOR[relic.rarity]}88`, borderRadius: '4px', padding: '2px 8px', fontWeight: 'bold' }}>
-                                            ✨ {RARITY_LABEL[relic.rarity]}
-                                        </div>
-                                    </>
-                                );
-                            })()}
+                                            <div style={{ fontSize: '32px', lineHeight: 1, flexShrink: 0 }}>{relic.icon}</div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
                         </div>
                     );
                 })}
             </div>
 
-            {/* 進むボタン（選択後のみ有効） */}
+            {/* 進むボタン */}
             <button
                 onClick={() => { if (draftPicked) setShowRecipeSelect(false); }}
                 disabled={!draftPicked}
                 style={{
-                    marginTop: '20px',
-                    padding: '11px 48px',
+                    flexShrink: 0,
+                    padding: '8px 36px',
                     background: draftPicked ? 'linear-gradient(135deg, #2a0808, #5a1212)' : '#100c18',
                     color: draftPicked ? '#ffaaaa' : '#442233',
                     border: `1px solid ${draftPicked ? '#662222' : '#220011'}`,
-                    borderRadius: '8px', fontSize: '13px', fontWeight: 'bold',
+                    borderRadius: '8px', fontSize: '12px', fontWeight: 'bold',
                     cursor: draftPicked ? 'pointer' : 'not-allowed',
                     letterSpacing: '2px',
                 }}>
