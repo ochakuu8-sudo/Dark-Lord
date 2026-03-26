@@ -232,6 +232,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 cooldown: Math.random() * (stats.maxCooldown! / 2),
                 maxCooldown: stats.maxCooldown!, color: stats.color!,
                 materialType: stats.materialType,
+                attackType: stats.attackType,
                 passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined
             });
         });
@@ -260,6 +261,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 speed: stats.speed! * spdMult, cooldown: 0,
                 maxCooldown: stats.maxCooldown!, color: stats.color!,
                 materialType: stats.materialType,
+                attackType: stats.attackType,
                 passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined
             };
             stateRef.current.entities.push(newEnt);
