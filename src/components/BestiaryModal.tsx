@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UNIT_STATS, PASSIVE_DESCRIPTIONS } from '../game/entities';
-import { ALL_RECIPES, COLOR_HEX, PIECE_EMOJIS, RARITY_COLOR, RARITY_LABEL } from '../game/config';
+import { ALL_RECIPES, RELICS, COLOR_HEX, PIECE_EMOJIS, RARITY_COLOR, RARITY_LABEL } from '../game/config';
 
 interface BestiaryModalProps {
     isOpen: boolean;
@@ -16,7 +16,7 @@ const MATERIAL_LABEL: Record<number, { name: string; emoji: string; color: strin
 const HERO_IDS = ['村人', '農夫', '弓兵', '剣士', '魔法使い', '重騎士', 'プリースト', '聖騎士', 'パラディン', '大魔道士', '勇者'];
 
 const BestiaryModal: React.FC<BestiaryModalProps> = ({ isOpen, onClose }) => {
-    const [activeTab, setActiveTab] = useState<'RECIPE' | 'HERO'>('RECIPE');
+    const [activeTab, setActiveTab] = useState<'RECIPE' | 'RELIC' | 'HERO'>('RECIPE');
     const [hoveredId, setHoveredId] = useState<string | null>(null);
 
     if (!isOpen) return null;
@@ -41,7 +41,7 @@ const BestiaryModal: React.FC<BestiaryModalProps> = ({ isOpen, onClose }) => {
                 }}>
                     <div>
                         <h2 style={{ margin: 0, color: '#ff4444', fontSize: '28px', textShadow: '0 0 15px rgba(255,0,0,0.5)', letterSpacing: '2px' }}>
-                            {activeTab === 'RECIPE' ? '召喚レシピ & 魔物図鑑' : '光の勢力 調査録'}
+                            {activeTab === 'RECIPE' ? '召喚レシピ & 魔物図鑑' : activeTab === 'RELIC' ? 'レリック一覧' : '光の勢力 調査録'}
                         </h2>
                         <div style={{ fontSize: '12px', color: '#644', marginTop: '4px' }}>Ancient Archives of the Infernal Realm</div>
                     </div>
@@ -63,7 +63,8 @@ const BestiaryModal: React.FC<BestiaryModalProps> = ({ isOpen, onClose }) => {
                 {/* Tabs */}
                 <div style={{ display: 'flex', backgroundColor: '#0d0d12' }}>
                     {([
-                        { key: 'RECIPE', label: '📜 魔物図鑑', activeColor: '#ffddaa', activeBg: '#1a1208', shadow: 'rgba(255,220,160,0.5)' },
+                        { key: 'RECIPE', label: '📜 魔物図鑑',       activeColor: '#ffddaa', activeBg: '#1a1208', shadow: 'rgba(255,220,160,0.5)' },
+                        { key: 'RELIC',  label: '✨ レリック',        activeColor: '#cc88ff', activeBg: '#1a0a24', shadow: 'rgba(204,136,255,0.5)' },
                         { key: 'HERO',   label: '⚔️ 英雄たちの行進', activeColor: '#ffd700', activeBg: '#24240a', shadow: 'rgba(255,215,0,0.5)' },
                     ] as const).map(tab => (
                         <div
@@ -192,6 +193,40 @@ const BestiaryModal: React.FC<BestiaryModalProps> = ({ isOpen, onClose }) => {
                                                     </div>
                                                 );
                                             })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : activeTab === 'RELIC' ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                            {RELICS.map(relic => {
+                                const rarityCol = RARITY_COLOR[relic.rarity];
+                                return (
+                                    <div key={relic.id} style={{
+                                        background: '#0d0d16', border: `1px solid ${rarityCol}55`,
+                                        borderRadius: '14px', padding: '20px',
+                                        display: 'flex', gap: '16px', alignItems: 'flex-start',
+                                    }}>
+                                        <div style={{ fontSize: '44px', lineHeight: 1, flexShrink: 0 }}>{relic.icon}</div>
+                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff' }}>{relic.name}</div>
+                                                <div style={{
+                                                    fontSize: '10px', fontWeight: 'bold', color: rarityCol,
+                                                    background: `${rarityCol}22`, border: `1px solid ${rarityCol}66`,
+                                                    borderRadius: '4px', padding: '2px 8px', flexShrink: 0,
+                                                }}>
+                                                    {RARITY_LABEL[relic.rarity]}
+                                                </div>
+                                            </div>
+                                            <div style={{
+                                                fontSize: '12px', color: '#aa88bb', lineHeight: 1.6,
+                                                padding: '10px 12px', background: 'rgba(0,0,0,0.3)',
+                                                borderRadius: '8px', borderLeft: `3px solid ${rarityCol}66`,
+                                            }}>
+                                                {relic.description}
+                                            </div>
                                         </div>
                                     </div>
                                 );
