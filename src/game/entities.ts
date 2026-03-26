@@ -43,10 +43,10 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'cerberus_meat':   { maxHp: 850, attack: 130, range: 50, speed: DEMON_SPEED * 1.2, maxCooldown: 35, color: 0xff7777, materialType: 1 },
     'cerberus_spirit': { maxHp: 400, attack: 85,  range: 180, speed: DEMON_SPEED,      maxCooldown: 50, color: 0xbb88ff, materialType: 2 },
 
-    // --- Wraith Derivations (Base: 霊3+X, レア・遠距離浮遊) ---
-    'wraith_bone':   { maxHp: 550, attack: 130, range: 300, speed: DEMON_SPEED * 0.8, maxCooldown: 60, color: 0xeeeeff, materialType: 0 },
-    'wraith_meat':   { maxHp: 750, attack: 110, range: 200, speed: DEMON_SPEED * 0.8, maxCooldown: 55, color: 0xffaaaa, materialType: 1 },
-    'wraith_spirit': { maxHp: 350, attack: 160, range: 420, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xaa55ff, materialType: 2 },
+    // --- Lich Derivations (Base: 霊3+X, コモン・遠距離浮遊) ---
+    'lich_bone':   { maxHp: 550, attack: 130, range: 300, speed: DEMON_SPEED * 0.8, maxCooldown: 60, color: 0xeeeeff, materialType: 0 },
+    'lich_meat':   { maxHp: 750, attack: 110, range: 200, speed: DEMON_SPEED * 0.8, maxCooldown: 55, color: 0xffaaaa, materialType: 1 },
+    'lich_spirit': { maxHp: 350, attack: 160, range: 420, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xaa55ff, materialType: 2 },
 
     // --- Goblin Derivations (Base: 3マッチ雑魚・APループ燃料) ---
     'goblin_bone': { maxHp: 80,  attack: 15, range: 40, speed: DEMON_SPEED * 1.2, maxCooldown: 40, color: 0xaaaaaa, materialType: 0 },
@@ -62,11 +62,6 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'archer_bone':   { maxHp: 300, attack: 200, range: 630, speed: DEMON_SPEED,       maxCooldown: 80, color: 0xdddddd, materialType: 0 },
     'archer_meat':   { maxHp: 550, attack: 160, range: 210, speed: DEMON_SPEED * 0.9, maxCooldown: 18, color: 0xff9999, materialType: 1 },
     'archer_spirit': { maxHp: 200, attack: 100, range: 360, speed: DEMON_SPEED,       maxCooldown: 30, color: 0xcc88ff, materialType: 2 },
-
-    // --- Wizard Derivations (Base: 全画面狙撃魔法) ---
-    'wizard_bone':   { maxHp: 400, attack: 0,   range: 900, speed: DEMON_SPEED * 0.5, maxCooldown: 60,  color: 0xeeeeee, materialType: 0 },
-    'wizard_meat':   { maxHp: 500, attack: 120, range: 900, speed: DEMON_SPEED * 0.5, maxCooldown: 150, color: 0xffcccc, materialType: 1 },
-    'wizard_spirit': { maxHp: 300, attack: 80,  range: 350, speed: DEMON_SPEED * 0.5, maxCooldown: 120, color: 0x9900ff, materialType: 2 },
 
     // --- Necromancer Derivations (Base: Token/Death) ---
     'necromancer_bone':   { maxHp: 450, attack: 100, range: 200, speed: DEMON_SPEED * 0.7, maxCooldown: 100, color: 0xffffff, materialType: 0 },

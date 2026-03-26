@@ -60,22 +60,6 @@ export const ALL_RECIPES: Recipe[] = [
         }
     },
     {
-        id: 'wizard',
-        name: 'ウィザード',
-        rarity: 'rare',
-        pattern: [
-            [-1, 2, -1], //   霊
-            [ 2, 9,  2], // 霊 X 霊
-            [-1, 2, -1], //   霊
-        ],
-        reward: 3,
-        resultMap: {
-            0: 'wizard_bone',
-            1: 'wizard_meat',
-            2: 'wizard_spirit',
-        }
-    },
-    {
         id: 'necromancer',
         name: 'ネクロマンサー',
         rarity: 'rare',
@@ -121,8 +105,8 @@ export const ALL_RECIPES: Recipe[] = [
         }
     },
     {
-        id: 'wraith',
-        name: 'レイス',
+        id: 'lich',
+        name: 'リッチ',
         rarity: 'common',
         pattern: [
             [9, -1], // X ·
@@ -131,9 +115,9 @@ export const ALL_RECIPES: Recipe[] = [
         ],
         reward: 2,
         resultMap: {
-            0: 'wraith_bone',
-            1: 'wraith_meat',
-            2: 'wraith_spirit',
+            0: 'lich_bone',
+            1: 'lich_meat',
+            2: 'lich_spirit',
         }
     },
     {
@@ -180,7 +164,7 @@ export const RECIPE_EMOJIS: Record<string, string> = {
     orc:         '👹',
     skeleton:    '💀',
     archer:      '🏹',
-    wizard:      '🧙',
+    lich:        '💀',
     necromancer: '🧟',
 };
 
