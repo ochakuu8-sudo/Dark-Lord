@@ -1,16 +1,14 @@
-export type Rarity = 'common' | 'rare' | 'epic' | 'legend';
+export type Rarity = 'common' | 'rare' | 'legend';
 
 export const RARITY_LABEL: Record<Rarity, string> = {
     common: 'コモン',
     rare:   'レア',
-    epic:   'エピック',
     legend: 'レジェンド',
 };
 
 export const RARITY_COLOR: Record<Rarity, string> = {
     common: '#aaaaaa',
     rare:   '#4488ff',
-    epic:   '#aa44ff',
     legend: '#ffaa00',
 };
 
@@ -80,7 +78,7 @@ export const ALL_RECIPES: Recipe[] = [
     {
         id: 'necromancer',
         name: 'ネクロマンサー',
-        rarity: 'epic',
+        rarity: 'rare',
         pattern: [
             [ 2, 9,  2], // 霊 X 霊
             [-1, 0, -1], //   骨
@@ -215,6 +213,6 @@ export interface Relic {
 export const RELICS: Relic[] = [
     { id: 'giant_heart',       name: '巨人の心臓',       rarity: 'rare',  description: '全魔物のHPが2倍になる。ただし移動速度が30%低下する。',           price: 80,  icon: '❤️' },
     { id: 'fire_crown',        name: '炎の王冠',          rarity: 'rare',  description: '赤系ユニットの攻撃力が1.5倍になる。それ以外は0.8倍になる。',       price: 80,  icon: '👑' },
-    { id: 'mana_prism',        name: 'マナの水晶',        rarity: 'epic',  description: '自拠点の最大HPが半分になる代わりに、強力な魔法効果を得る。',       price: 60,  icon: '💎' },
-    { id: 'necromancer_guide', name: '死霊術師の手引き',  rarity: 'epic',  description: '敵ユニット撃破時25%の確率でスケルトンが召喚される。',               price: 100, icon: '📖' },
+    { id: 'mana_prism',        name: 'マナの水晶',        rarity: 'rare',  description: '自拠点の最大HPが半分になる代わりに、強力な魔法効果を得る。',       price: 60,  icon: '💎' },
+    { id: 'necromancer_guide', name: '死霊術師の手引き',  rarity: 'rare',  description: '敵ユニット撃破時25%の確率でスケルトンが召喚される。',               price: 100, icon: '📖' },
 ];
