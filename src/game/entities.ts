@@ -54,73 +54,29 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'goblin_spirit': { maxHp: 60, attack: 10, range: 80, speed: DEMON_SPEED * 1.5, maxCooldown: 25, color: 0xcc88ff, materialType: 2 },
 
     // --- Orc Derivations (Base: Melee) ---
-    'orc_bone': { 
-        maxHp: 2000, attack: 50, range: 45, speed: DEMON_SPEED, maxCooldown: 60, color: 0xcccccc, materialType: 0,
-        passiveAbilities: [{ type: 'REFLECT', value: 0.6 }] // 60% 反射
-    },
-    'orc_meat': { 
-        maxHp: 1250, attack: 75, range: 45, speed: DEMON_SPEED, maxCooldown: 70, color: 0xff6666, materialType: 1
-    },
-    'orc_spirit': { 
-        maxHp: 700, attack: 60, range: 45, speed: DEMON_SPEED * 1.2, maxCooldown: 50, color: 0xaa66ff, materialType: 2,
-        passiveAbilities: [{ type: 'AURA_REGEN', value: 5, range: 100 }] // 周囲100pxに毎秒5回復
-    },
+    'orc_bone':   { maxHp: 2000, attack: 50, range: 45, speed: DEMON_SPEED,       maxCooldown: 60, color: 0xcccccc, materialType: 0 },
+    'orc_meat':   { maxHp: 1250, attack: 75, range: 45, speed: DEMON_SPEED,       maxCooldown: 70, color: 0xff6666, materialType: 1 },
+    'orc_spirit': { maxHp: 700,  attack: 60, range: 45, speed: DEMON_SPEED * 1.2, maxCooldown: 50, color: 0xaa66ff, materialType: 2 },
 
     // --- Skeleton Derivations ---
-    'skeleton_bone': {
-        maxHp: 300, attack: 200, range: 630, speed: DEMON_SPEED, maxCooldown: 80, color: 0xdddddd, materialType: 0
-        // 骨: 9マス射程・高火力スナイパー、攻撃頻度低め
-    },
-    'skeleton_meat': {
-        maxHp: 550, attack: 160, range: 210, speed: DEMON_SPEED * 0.9, maxCooldown: 18, color: 0xff9999, materialType: 1
-        // 肉: 3マス射程・耐久重視の近接高DPS
-    },
-    'skeleton_spirit': {
-        maxHp: 200, attack: 100, range: 360, speed: DEMON_SPEED, maxCooldown: 30, color: 0xcc88ff, materialType: 2,
-        passiveAbilities: [{ type: 'PIERCING', value: 600 }] // 5マス射程・貫通弾
-    },
+    'skeleton_bone':   { maxHp: 300, attack: 200, range: 630, speed: DEMON_SPEED,       maxCooldown: 80, color: 0xdddddd, materialType: 0 },
+    'skeleton_meat':   { maxHp: 550, attack: 160, range: 210, speed: DEMON_SPEED * 0.9, maxCooldown: 18, color: 0xff9999, materialType: 1 },
+    'skeleton_spirit': { maxHp: 200, attack: 100, range: 360, speed: DEMON_SPEED,       maxCooldown: 30, color: 0xcc88ff, materialType: 2 },
 
     // --- Wizard Derivations (Base: 全画面狙撃魔法) ---
-    'wizard_bone': {
-        maxHp: 400, attack: 0, range: 900, speed: DEMON_SPEED * 0.5, maxCooldown: 60, color: 0xeeeeee, materialType: 0,
-        passiveAbilities: [{ type: 'ATK_BUFF', value: 0.2, range: 200 }] // 広範囲ATKバフ（動かないので広め）
-    },
-    'wizard_meat': {
-        maxHp: 500, attack: 120, range: 900, speed: DEMON_SPEED * 0.5, maxCooldown: 150, color: 0xffcccc, materialType: 1,
-        passiveAbilities: [{ type: 'HEAL_SHOT' }] // 全画面から味方を回復
-    },
-    'wizard_spirit': {
-        maxHp: 300, attack: 80, range: 350, speed: DEMON_SPEED * 0.5, maxCooldown: 120, color: 0x9900ff, materialType: 2,
-        passiveAbilities: [{ type: 'INSTANT_AOE', value: 80, range: 120 }] // 射程内の敵位置に直接範囲ダメージ
-    },
+    'wizard_bone':   { maxHp: 400, attack: 0,   range: 900, speed: DEMON_SPEED * 0.5, maxCooldown: 60,  color: 0xeeeeee, materialType: 0 },
+    'wizard_meat':   { maxHp: 500, attack: 120, range: 900, speed: DEMON_SPEED * 0.5, maxCooldown: 150, color: 0xffcccc, materialType: 1 },
+    'wizard_spirit': { maxHp: 300, attack: 80,  range: 350, speed: DEMON_SPEED * 0.5, maxCooldown: 120, color: 0x9900ff, materialType: 2 },
 
     // --- Necromancer Derivations (Base: Token/Death) ---
-    'necromancer_bone': { 
-        maxHp: 450, attack: 100, range: 200, speed: DEMON_SPEED * 0.7, maxCooldown: 100, color: 0xffffff, materialType: 0,
-        passiveAbilities: [{ type: 'PIECE_RETURN', range: 250 }] // 回収範囲拡大 250px
-    },
-    'necromancer_meat': { 
-        maxHp: 550, attack: 25, range: 100, speed: DEMON_SPEED * 0.7, maxCooldown: 360, color: 0xff4444, materialType: 1,
-        passiveAbilities: [{ type: 'SUMMON', value: 1 }] // ゾンビ召喚
-    },
-    'necromancer_spirit': { 
-        maxHp: 350, attack: 100, range: 180, speed: DEMON_SPEED * 0.8, maxCooldown: 80, color: 0x7700cc, materialType: 2,
-        passiveAbilities: [{ type: 'CORPSE_EXPLOSION', value: 1.5, range: 150 }] // 攻撃力100 * 1.5 = 150ダメ (5倍)
-    },
+    'necromancer_bone':   { maxHp: 450, attack: 100, range: 200, speed: DEMON_SPEED * 0.7, maxCooldown: 100, color: 0xffffff, materialType: 0 },
+    'necromancer_meat':   { maxHp: 550, attack: 25,  range: 100, speed: DEMON_SPEED * 0.7, maxCooldown: 360, color: 0xff4444, materialType: 1 },
+    'necromancer_spirit': { maxHp: 350, attack: 100, range: 180, speed: DEMON_SPEED * 0.8, maxCooldown: 80,  color: 0x7700cc, materialType: 2 },
 
-    // ウィスプ（ワイルド未決定のためXバリアントはTBD）
-    'wisp_bone': {
-        maxHp: 250, attack: 300, range: 80, speed: DEMON_SPEED * 1.3, maxCooldown: 60, color: 0xeeeeff, materialType: 0,
-        passiveAbilities: [{ type: 'PROXIMITY_EXPLOSION', value: 300, range: 80 }]
-    },
-    'wisp_meat': {
-        maxHp: 450, attack: 400, range: 80, speed: DEMON_SPEED * 1.1, maxCooldown: 60, color: 0xff9999, materialType: 1,
-        passiveAbilities: [{ type: 'PROXIMITY_EXPLOSION', value: 400, range: 80 }]
-    },
-    'wisp_spirit': {
-        maxHp: 200, attack: 250, range: 100, speed: DEMON_SPEED * 1.5, maxCooldown: 60, color: 0xcc88ff, materialType: 2,
-        passiveAbilities: [{ type: 'PROXIMITY_EXPLOSION', value: 250, range: 100 }]
-    },
+    // --- Wisp Derivations ---
+    'wisp_bone':   { maxHp: 250, attack: 300, range: 80,  speed: DEMON_SPEED * 1.3, maxCooldown: 60, color: 0xeeeeff, materialType: 0 },
+    'wisp_meat':   { maxHp: 450, attack: 400, range: 80,  speed: DEMON_SPEED * 1.1, maxCooldown: 60, color: 0xff9999, materialType: 1 },
+    'wisp_spirit': { maxHp: 200, attack: 250, range: 100, speed: DEMON_SPEED * 1.5, maxCooldown: 60, color: 0xcc88ff, materialType: 2 },
 
     // --- Token Units ---
     'zombie': {
