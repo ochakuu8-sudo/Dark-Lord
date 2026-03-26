@@ -125,7 +125,7 @@ export const ALL_RECIPES: Recipe[] = [
     {
         id: 'wraith',
         name: 'レイス',
-        rarity: 'rare',
+        rarity: 'common',
         pattern: [
             [2, -1], // 霊 ·
             [2,  9], // 霊 X

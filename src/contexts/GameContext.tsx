@@ -80,9 +80,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [phase, setPhase] = useState<GamePhase>('TITLE');
     const [summonedMonsters, setSummonedMonsters] = useState<SummonedUnit[]>([]);
 
-    // レシピ装備システム（初期: オーク・スケルトン・ウィスプ）
-    const [unlockedRecipes, setUnlockedRecipes] = useState<string[]>(['orc', 'skeleton', 'wisp']);
-    const [equippedRecipes, setEquippedRecipes] = useState<(string | null)[]>(['orc', 'skeleton', 'wisp']);
+    // レシピ装備システム（スタートドラフトで初期化）
+    const [unlockedRecipes, setUnlockedRecipes] = useState<string[]>([]);
+    const [equippedRecipes, setEquippedRecipes] = useState<(string | null)[]>([]);
     const activeRecipes = equippedRecipes
         .map(id => ALL_RECIPES.find(r => r.id === id))
         .filter((r): r is Recipe => r !== undefined);
