@@ -45,8 +45,8 @@ export const ALL_RECIPES: Recipe[] = [
         }
     },
     {
-        id: 'skeleton',
-        name: 'スケルトン',
+        id: 'archer',
+        name: 'アーチャー',
         rarity: 'common',
         pattern: [
             [0], // 骨
@@ -56,9 +56,9 @@ export const ALL_RECIPES: Recipe[] = [
         ],
         reward: 2,
         resultMap: {
-            0: 'skeleton_bone',
-            1: 'skeleton_meat',
-            2: 'skeleton_spirit',
+            0: 'archer_bone',
+            1: 'archer_meat',
+            2: 'archer_spirit',
         }
     },
     {
@@ -94,8 +94,8 @@ export const ALL_RECIPES: Recipe[] = [
         }
     },
     {
-        id: 'gargoyle',
-        name: 'ガーゴイル',
+        id: 'skeleton',
+        name: 'スケルトン',
         rarity: 'common',
         pattern: [
             [0, -1], // 骨 ·
@@ -103,9 +103,9 @@ export const ALL_RECIPES: Recipe[] = [
         ],
         reward: 1,
         resultMap: {
-            0: 'gargoyle_bone',
-            1: 'gargoyle_meat',
-            2: 'gargoyle_spirit',
+            0: 'skeleton_bone',
+            1: 'skeleton_meat',
+            2: 'skeleton_spirit',
         }
     },
     {
@@ -181,6 +181,7 @@ export const RECIPE_EMOJIS: Record<string, string> = {
     goblin:      '👺',
     orc:         '👹',
     skeleton:    '💀',
+    archer:      '🏹',
     wizard:      '🧙',
     necromancer: '🧟',
 };

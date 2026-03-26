@@ -657,7 +657,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
                     // Necromancer Guide effect (Relic)
                     if (ownedRelics.includes('necromancer_guide') && Math.random() < 0.25) {
-                        const skelStats = UNIT_STATS['skeleton'] || UNIT_STATS['goblin'];
+                        const skelStats = UNIT_STATS['archer_bone'] || UNIT_STATS['goblin_bone'];
                         const hasGiantHeart = ownedRelics.includes('giant_heart');
                         const hasFireCrown = ownedRelics.includes('fire_crown');
                         let hpMult = hasGiantHeart ? 2.0 : 1.0;
@@ -665,7 +665,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         let atkMult = hasFireCrown ? (skelStats.color === 0xff3333 ? 1.5 : 0.8) : 1.0;
 
                         const newSkel = {
-                            id: generateId(), type: 'skeleton', faction: 'DEMON' as const,
+                            id: generateId(), type: 'archer_bone', faction: 'DEMON' as const,
                             x: ent.x, y: ent.y,
                             hp: Math.floor(skelStats.maxHp! * hpMult), maxHp: Math.floor(skelStats.maxHp! * hpMult),
                             attack: Math.floor(skelStats.attack! * atkMult), range: skelStats.range!,

@@ -31,7 +31,7 @@ const GameController: React.FC = () => {
 
   const startDebugMode = () => {
     setIsDebugMode(true);
-    ['orc', 'skeleton', 'wizard', 'necromancer', 'wisp', 'gargoyle', 'cerberus', 'wraith'].forEach(id => {
+    ['orc', 'archer', 'wizard', 'necromancer', 'wisp', 'skeleton', 'cerberus', 'wraith'].forEach(id => {
       unlockRecipe(id);
       addEquippedRecipe(id);
     });

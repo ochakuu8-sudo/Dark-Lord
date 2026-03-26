@@ -72,7 +72,7 @@ const RitualPhase: React.FC = () => {
         vip_guard:   { name: '精鋭護衛隊', desc: '聖騎士に守られた勇者が直接攻撃',       difficulty: 'hard' },
     };
     const RECIPE_TIER: Record<string, 1 | 2 | 3> = {
-        orc: 1, wisp: 1, skeleton: 2, wizard: 2, necromancer: 3,
+        orc: 1, wisp: 1, skeleton: 1, archer: 2, wizard: 2, necromancer: 3,
     };
     const DIFF_COLOR: Record<DraftDifficulty, string> = {
         easy: '#44aa44', normal: '#ffaa00', hard: '#ff4444',
