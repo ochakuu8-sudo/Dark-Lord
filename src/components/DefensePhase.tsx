@@ -797,10 +797,22 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     const a = Math.atan2(target.y - ent.y, target.x - ent.x);
                     ent.x += Math.cos(a) * ent.speed * delta;
                     ent.y += Math.sin(a) * ent.speed * delta;
+                } else {
+                    // HERO: ターゲットが射程外なら近づく
+                    if (minDist > ent.range) {
+                        const a = Math.atan2(target.y - ent.y, target.x - ent.x);
+                        ent.x += Math.cos(a) * ent.speed * delta;
+                        ent.y += Math.sin(a) * ent.speed * delta;
+                    }
                 }
             } else if (ent.faction === 'DEMON') {
                 // ターゲットなし: 敵陣中央へ前進
                 const a = Math.atan2(FIELD_HEIGHT / 2 - ent.y, BOARD_WIDTH * 1.5 - ent.x);
+                ent.x += Math.cos(a) * ent.speed * delta;
+                ent.y += Math.sin(a) * ent.speed * delta;
+            } else {
+                // HERO ターゲットなし: 魔王拠点へ前進
+                const a = Math.atan2(DEMON_BASE.y - ent.y, DEMON_BASE.x - ent.x);
                 ent.x += Math.cos(a) * ent.speed * delta;
                 ent.y += Math.sin(a) * ent.speed * delta;
             }
