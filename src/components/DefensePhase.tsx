@@ -1153,7 +1153,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         stateRef.current.entities.forEach(ent => {
             const isBoss = ent.id.startsWith('boss-');
-            const sz = ent.type === 'ボス' ? 35 : isBoss ? 30 : (ent.faction === 'HERO' ? 15 : 18);
+            const sz = ent.type === 'ボス' ? 35 : isBoss ? 30 : (ent.faction === 'HERO' ? 15 : (ent.size ?? 18));
             const isElite = ent.faction === 'HERO' && stateRef.current.eliteIds.has(ent.id);
             let g = entityGfxPool.current.get(ent.id);
 
