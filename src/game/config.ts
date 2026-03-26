@@ -127,9 +127,9 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'レイス',
         rarity: 'common',
         pattern: [
+            [9, -1], // X ·
             [2, -1], // 霊 ·
-            [2,  9], // 霊 X
-            [2, -1], // 霊 ·
+            [2,  2], // 霊 霊
         ],
         reward: 2,
         resultMap: {
