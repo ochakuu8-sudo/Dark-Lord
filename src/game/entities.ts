@@ -1,5 +1,13 @@
 export interface PassiveAbility {
-    type: 'REFLECT' | 'AURA_REGEN' | 'PIERCING' | 'PIECE_RETURN' | 'CLONE' | 'AREA_DOT' | 'ATK_BUFF' | 'HEAL_SHOT' | 'SUMMON' | 'CORPSE_EXPLOSION' | 'PROXIMITY_EXPLOSION' | 'INSTANT_AOE';
+    type: 'REFLECT' | 'AURA_REGEN' | 'PIERCING' | 'PIECE_RETURN' | 'CLONE' | 'AREA_DOT' | 'ATK_BUFF' | 'HEAL_SHOT' | 'SUMMON' | 'CORPSE_EXPLOSION' | 'PROXIMITY_EXPLOSION' | 'INSTANT_AOE' |
+        'BERSERK' | 'SELF_REGEN' | 'LIFESTEAL' | 'POISON' |
+        'DOUBLE_SPAWN' | 'ON_DEATH_SPAWN' | 'UNTARGETABLE' |
+        'RAPID_FIRE' | 'MACHINE_GUN' | 'BOUNCE_SHOT' |
+        'HEAL_AURA' | 'AOE_ON_HIT' |
+        'EXPLODE_PROJECTILE' | 'EXPLODE_HEAL' | 'CHARGE_EXPLOSION' |
+        'ALLY_DEATH_EXPLOSION' | 'ENEMY_DEATH_SPAWN' |
+        'CHARGE' | 'KNOCKBACK' | 'RANGED_RESIST' |
+        'TARGET_LOWEST_HP' | 'MOVE_REGEN' | 'STEALTH';
     value?: number;
     range?: number;
     cooldown?: number;

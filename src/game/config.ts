@@ -109,9 +109,8 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'リッチ',
         rarity: 'common',
         pattern: [
-            [9, -1], // X ·
-            [2, -1], // 霊 ·
-            [2,  2], // 霊 霊
+            [2, 2,  2], // 霊 霊 霊
+            [9, -1, -1], // X ·  ·
         ],
         reward: 2,
         resultMap: {
@@ -135,7 +134,38 @@ export const ALL_RECIPES: Recipe[] = [
             1: 'wisp_meat',
             2: 'wisp_spirit',
         }
-    }
+    },
+    {
+        id: 'minotaur',
+        name: 'ミノタウロス',
+        rarity: 'rare',
+        pattern: [
+            [-1, 1, 0,  0], // · 肉 骨 骨
+            [ 1, 9, -1, -1], // 肉 ❓ · ·
+        ],
+        reward: 3,
+        resultMap: {
+            0: 'minotaur_bone',
+            1: 'minotaur_meat',
+            2: 'minotaur_spirit',
+        }
+    },
+    {
+        id: 'ghoul',
+        name: 'グール',
+        rarity: 'rare',
+        pattern: [
+            [-1, 1, -1], // · 肉 ·
+            [ 2, 9,  1], // 霊 ❓ 肉
+            [-1, 2, -1], // · 霊 ·
+        ],
+        reward: 3,
+        resultMap: {
+            0: 'ghoul_bone',
+            1: 'ghoul_meat',
+            2: 'ghoul_spirit',
+        }
+    },
 ];
 
 
@@ -166,6 +196,8 @@ export const RECIPE_EMOJIS: Record<string, string> = {
     archer:      '🏹',
     lich:        '💀',
     necromancer: '🧟',
+    minotaur:    '🐂',
+    ghoul:       '👾',
 };
 
 // ワイルドカード素材ごとのピース背景色 (0x形式)
