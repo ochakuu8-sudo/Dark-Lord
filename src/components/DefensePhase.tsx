@@ -51,6 +51,8 @@ interface Projectile {
     areaMultiplier?: number;
     duration?: number;
     sourceId?: string;
+    bouncesLeft?: number;
+    fromProjectile?: boolean; // true if from a projectile (for RANGED_RESIST)
 }
 
 interface FloatingText {
@@ -223,6 +225,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             const groupX = unit.c * BLOCK_SIZE + BLOCK_SIZE / 2;
             const groupY = unit.r * BLOCK_SIZE + BLOCK_SIZE / 2;
 
+            const hasStealthPassive = stats.passiveAbilities?.some(pa => pa.type === 'STEALTH');
             initialEntities.push({
                 id: unit.id, type: unit.type, faction: 'DEMON',
                 x: groupX, y: groupY,
@@ -235,7 +238,9 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 attackType: stats.attackType,
                 size: stats.size,
                 accuracy: stats.accuracy,
-                passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined
+                passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined,
+                stealthActive: hasStealthPassive ? true : undefined,
+                spawnedAt: 0,
             });
         });
 
@@ -254,6 +259,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             const spdMult = hasGiantHeart ? 0.7 : 1.0;
             const atkMult = hasFireCrown ? ((stats.color || 0xffffff) === 0xff3333 ? 1.5 : 0.8) : 1.0;
             const id = generateId();
+            const hasStealthPassive2 = stats.passiveAbilities?.some(pa => pa.type === 'STEALTH');
             const newEnt: EntityState = {
                 id, type, faction: 'DEMON',
                 x: DEMON_BASE.x + 60 + Math.random() * 60,
@@ -266,7 +272,9 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 attackType: stats.attackType,
                 size: stats.size,
                 accuracy: stats.accuracy,
-                passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined
+                passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined,
+                stealthActive: hasStealthPassive2 ? true : undefined,
+                spawnedAt: stateRef.current.frameCount,
             };
             stateRef.current.entities.push(newEnt);
         };
@@ -492,6 +500,13 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         const finalTargetX = isPiercing ? attacker.x + Math.cos(angle) * 2000 : tx;
         const finalTargetY = isPiercing ? attacker.y + Math.sin(angle) * 2000 : ty;
 
+        // Check for BOUNCE_SHOT ability
+        let bouncesLeft = 0;
+        if (attacker.passiveAbilities) {
+            const bounceAbility = attacker.passiveAbilities.find(pa => pa.type === 'BOUNCE_SHOT');
+            if (bounceAbility) bouncesLeft = bounceAbility.value || 2;
+        }
+
         s.projectiles.push({
             id: generateId(),
             x: attacker.x, y: attacker.y,
@@ -511,7 +526,9 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             isArea,
             areaRadius,
             areaMultiplier,
-            sourceId: attacker.id
+            sourceId: attacker.id,
+            bouncesLeft,
+            fromProjectile: true,
         });
     };
 
@@ -534,13 +551,19 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         const aliveEntities: EntityState[] = [];
         let heroCount = 0, demonCount = 0;
 
-        const applyDamage = (targetEnt: EntityState, dmgRaw: number, attacker?: EntityState) => {
+        const applyDamage = (targetEnt: EntityState, dmgRaw: number, attacker?: EntityState, fromProjectile?: boolean) => {
             if (dmgRaw < 0) {
                 // Heal
                 targetEnt.hp = Math.min(targetEnt.maxHp, targetEnt.hp - dmgRaw);
                 s.floatingTexts.push({ id: generateId(), x: targetEnt.x, y: targetEnt.y - 15, text: '+' + Math.floor(-dmgRaw), life: 55, maxLife: 55, color: 0x44ff44 });
             } else {
                 let finalDamage = dmgRaw;
+
+                // RANGED_RESIST: reduce projectile damage
+                if (fromProjectile && targetEnt.passiveAbilities) {
+                    const rangedResist = targetEnt.passiveAbilities.find(pa => pa.type === 'RANGED_RESIST');
+                    if (rangedResist) finalDamage *= (rangedResist.value ?? 0.5);
+                }
 
                 // ATK_BUFF (Bone Wizard) check
                 if (attacker && attacker.faction === 'DEMON') {
@@ -589,6 +612,26 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         for (let k = 0; k < 2; k++) {
                             s.particles.push({ id: generateId(), x: targetEnt.x, y: targetEnt.y, vx: (attacker.x - targetEnt.x) * 0.05, vy: (attacker.y - targetEnt.y) * 0.05, color: 0xdddddd, life: 15 });
                         }
+                    }
+                }
+
+                // LIFESTEAL: attacker heals from damage dealt
+                if (attacker && attacker.hp > 0 && attacker.passiveAbilities) {
+                    const lifesteal = attacker.passiveAbilities.find(pa => pa.type === 'LIFESTEAL');
+                    if (lifesteal) {
+                        const healAmt = finalDamage * (lifesteal.value || 0.3);
+                        attacker.hp = Math.min(attacker.maxHp, attacker.hp + healAmt);
+                        if (Math.random() < 0.3) {
+                            s.particles.push({ id: generateId(), x: attacker.x, y: attacker.y, vx: 0, vy: -1, color: 0xff4444, life: 20 });
+                        }
+                    }
+                }
+
+                // POISON: set poisonedFrames on target
+                if (attacker && attacker.passiveAbilities) {
+                    const poison = attacker.passiveAbilities.find(pa => pa.type === 'POISON');
+                    if (poison && targetEnt.hp > 0) {
+                        targetEnt.poisonedFrames = poison.range || 180;
                     }
                 }
             }
@@ -658,6 +701,140 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                 }
 
+                // DEMON death passives
+                if (ent.faction === 'DEMON' && ent.passiveAbilities) {
+                    // ON_DEATH_SPAWN (skeleton_meat): spawn skeleton_bone at death position
+                    const onDeathSpawn = ent.passiveAbilities.find(pa => pa.type === 'ON_DEATH_SPAWN');
+                    if (onDeathSpawn) {
+                        const spawnType = 'skeleton_bone';
+                        const spStats = UNIT_STATS[spawnType];
+                        if (spStats) {
+                            const spawnEnt: EntityState = {
+                                id: generateId(), type: spawnType, faction: 'DEMON',
+                                x: ent.x + (Math.random() - 0.5) * 20, y: ent.y + (Math.random() - 0.5) * 20,
+                                hp: spStats.maxHp!, maxHp: spStats.maxHp!,
+                                attack: spStats.attack!, range: spStats.range!,
+                                speed: spStats.speed!, cooldown: 0,
+                                maxCooldown: spStats.maxCooldown!, color: spStats.color!,
+                                materialType: spStats.materialType, attackType: spStats.attackType,
+                                size: spStats.size, accuracy: spStats.accuracy,
+                                passiveAbilities: spStats.passiveAbilities ? [...spStats.passiveAbilities] : undefined,
+                                spawnedAt: s.frameCount,
+                            };
+                            aliveEntities.push(spawnEnt);
+                            s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💀転生', life: 50, maxLife: 50, color: 0xaaaacc });
+                        }
+                    }
+
+                    // EXPLODE_PROJECTILE (wisp_bone): fire 4 piercing projectiles on death
+                    const explodeProj = ent.passiveAbilities.find(pa => pa.type === 'EXPLODE_PROJECTILE');
+                    if (explodeProj) {
+                        const exDmg = explodeProj.value || 200;
+                        for (let k = 0; k < 4; k++) {
+                            const angle = (k * Math.PI / 2);
+                            s.projectiles.push({
+                                id: generateId(),
+                                x: ent.x, y: ent.y,
+                                targetId: 'forward',
+                                targetX: ent.x + Math.cos(angle) * 2000,
+                                targetY: ent.y + Math.sin(angle) * 2000,
+                                speed: 6, damage: exDmg, color: 0xeeeeff,
+                                style: 'orb', size: 10, angle,
+                                trail: [], isPiercing: true, hitIds: new Set(),
+                                maxDistance: 600, distanceTraveled: 0,
+                                sourceId: ent.id, fromProjectile: false,
+                            });
+                        }
+                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💥爆裂弾!', life: 50, maxLife: 50, color: 0xeeeeff });
+                    }
+
+                    // EXPLODE_HEAL (wisp_meat): heal allies on death explosion
+                    const explodeHeal = ent.passiveAbilities.find(pa => pa.type === 'EXPLODE_HEAL');
+                    if (explodeHeal) {
+                        const healRange = explodeHeal.range || 120;
+                        const healAmt = explodeHeal.value || 300;
+                        aliveEntities.forEach(other => {
+                            if (other.faction === 'DEMON' && other.hp > 0 && Math.hypot(other.x - ent.x, other.y - ent.y) <= healRange) {
+                                applyDamage(other, -healAmt);
+                            }
+                        });
+                        s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: healRange, life: 20, maxLife: 20, color: 0x44ff88 });
+                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💚癒し爆発!', life: 50, maxLife: 50, color: 0x44ff88 });
+                    }
+
+                    // CHARGE_EXPLOSION (wisp_spirit): bonus explosion damage from survival time
+                    const chargeExplosion = ent.passiveAbilities.find(pa => pa.type === 'CHARGE_EXPLOSION');
+                    if (chargeExplosion) {
+                        const baseDmg = chargeExplosion.value || 100;
+                        const survived = ent.spawnedAt !== undefined ? (s.frameCount - ent.spawnedAt) : 0;
+                        const totalDmg = baseDmg + survived * 2;
+                        const expR = 100;
+                        aliveEntities.forEach(other => {
+                            if (other.faction === 'HERO' && other.hp > 0 && Math.hypot(other.x - ent.x, other.y - ent.y) <= expR) {
+                                applyDamage(other, totalDmg, ent);
+                            }
+                        });
+                        s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: expR, life: 20, maxLife: 20, color: 0x9966ff });
+                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: `⚡チャージ爆発 ${Math.floor(totalDmg)}!`, life: 60, maxLife: 60, color: 0x9966ff });
+                    }
+
+                    // ALLY_DEATH_EXPLOSION: other necromancer_meats react when this demon dies
+                    // (handled below in the "any DEMON dies" section)
+                }
+
+                // On any entity death: trigger reactions from other units
+                {
+                    // ALLY_DEATH_EXPLOSION (necromancer_meat): trigger on ally demon death
+                    if (ent.faction === 'DEMON') {
+                        for (const other of entities) {
+                            if (other.hp > 0 && other.faction === 'DEMON' && other.passiveAbilities && other.id !== ent.id) {
+                                const allyDeathExp = other.passiveAbilities.find(pa => pa.type === 'ALLY_DEATH_EXPLOSION');
+                                if (allyDeathExp && Math.hypot(other.x - ent.x, other.y - ent.y) <= (allyDeathExp.range || 100)) {
+                                    const expDmg = allyDeathExp.value || 150;
+                                    const expR = allyDeathExp.range || 100;
+                                    aliveEntities.forEach(hero => {
+                                        if (hero.faction === 'HERO' && hero.hp > 0 && Math.hypot(hero.x - ent.x, hero.y - ent.y) <= expR) {
+                                            applyDamage(hero, expDmg, other);
+                                        }
+                                    });
+                                    s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: expR, life: 18, maxLife: 18, color: 0xff4444 });
+                                    s.floatingTexts.push({ id: generateId(), x: other.x, y: other.y - 20, text: '💀怒り爆発!', life: 50, maxLife: 50, color: 0xff4444 });
+                                }
+                            }
+                        }
+                    }
+
+                    // ENEMY_DEATH_SPAWN (necromancer_spirit): spawn skeleton_spirit when a HERO dies
+                    if (ent.faction === 'HERO') {
+                        for (const other of entities) {
+                            if (other.hp > 0 && other.faction === 'DEMON' && other.passiveAbilities) {
+                                const enemyDeathSpawn = other.passiveAbilities.find(pa => pa.type === 'ENEMY_DEATH_SPAWN');
+                                if (enemyDeathSpawn) {
+                                    const spawnType = 'skeleton_spirit';
+                                    const spStats = UNIT_STATS[spawnType];
+                                    if (spStats) {
+                                        const spawnEnt: EntityState = {
+                                            id: generateId(), type: spawnType, faction: 'DEMON',
+                                            x: ent.x + (Math.random() - 0.5) * 30, y: ent.y + (Math.random() - 0.5) * 30,
+                                            hp: spStats.maxHp!, maxHp: spStats.maxHp!,
+                                            attack: spStats.attack!, range: spStats.range!,
+                                            speed: spStats.speed!, cooldown: 0,
+                                            maxCooldown: spStats.maxCooldown!, color: spStats.color!,
+                                            materialType: spStats.materialType, attackType: spStats.attackType,
+                                            size: spStats.size, accuracy: spStats.accuracy,
+                                            passiveAbilities: spStats.passiveAbilities ? [...spStats.passiveAbilities] : undefined,
+                                            spawnedAt: s.frameCount,
+                                        };
+                                        aliveEntities.push(spawnEnt);
+                                        s.floatingTexts.push({ id: generateId(), x: other.x, y: other.y - 20, text: '👻霊召喚', life: 50, maxLife: 50, color: 0x7700cc });
+                                    }
+                                    break; // one summon per death
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Kill count
                 if (ent.faction === 'HERO') {
                     s.killCount++;
@@ -715,9 +892,15 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                 } else {
                     // 最近の魔物（レーン無制限）
+                    // Check if any non-UNTARGETABLE DEMON alive (for UNTARGETABLE skip logic)
+                    const hasNonUntargetableDemon = entities.some(e => e.faction === 'DEMON' && e.hp > 0 && !e.passiveAbilities?.some(pa => pa.type === 'UNTARGETABLE'));
                     for (let j = 0; j < entities.length; j++) {
                         const other = entities[j];
                         if (other.faction === 'DEMON' && other.hp > 0) {
+                            // UNTARGETABLE: skip if other non-untargetable demons exist
+                            if (other.passiveAbilities?.some(pa => pa.type === 'UNTARGETABLE') && hasNonUntargetableDemon) continue;
+                            // STEALTH: skip if stealthActive
+                            if (other.stealthActive) continue;
                             const d = Math.hypot(other.x - ent.x, other.y - ent.y);
                             if (d < minDist) { minDist = d; target = other; }
                         }
@@ -744,12 +927,24 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         }
                     }
                 } else {
-                    // その他魔物: 射程内の最近敵をオートエイム
-                    for (let j = 0; j < entities.length; j++) {
-                        const other = entities[j];
-                        if (other.faction === 'HERO' && other.hp > 0) {
-                            const d = Math.hypot(other.x - ent.x, other.y - ent.y);
-                            if (d < minDist) { minDist = d; target = other; }
+                    const isTargetLowestHp = ent.passiveAbilities?.some(pa => pa.type === 'TARGET_LOWEST_HP');
+                    if (isTargetLowestHp) {
+                        // Target the enemy with lowest HP
+                        let lowestHp = Infinity;
+                        for (let j = 0; j < entities.length; j++) {
+                            const other = entities[j];
+                            if (other.faction === 'HERO' && other.hp > 0) {
+                                if (other.hp < lowestHp) { lowestHp = other.hp; target = other; minDist = Math.hypot(other.x - ent.x, other.y - ent.y); }
+                            }
+                        }
+                    } else {
+                        // その他魔物: 射程内の最近敵をオートエイム
+                        for (let j = 0; j < entities.length; j++) {
+                            const other = entities[j];
+                            if (other.faction === 'HERO' && other.hp > 0) {
+                                const d = Math.hypot(other.x - ent.x, other.y - ent.y);
+                                if (d < minDist) { minDist = d; target = other; }
+                            }
                         }
                     }
                 }
@@ -757,10 +952,47 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
             if (ent.cooldown > 0) ent.cooldown -= delta;
 
+            // CHARGE cooldown
+            if (ent.chargeFrames !== undefined && ent.chargeFrames > 0) ent.chargeFrames -= delta;
+
+            // CHARGE ability: rush at target when within range
+            if (ent.faction === 'DEMON' && ent.passiveAbilities && target) {
+                const chargeAbility = ent.passiveAbilities.find(pa => pa.type === 'CHARGE');
+                if (chargeAbility && (ent.chargeFrames === undefined || ent.chargeFrames <= 0)) {
+                    const chargeTriggerRange = chargeAbility.range || 200;
+                    if (minDist <= chargeTriggerRange) {
+                        // Rush to target
+                        const chargeDmg = chargeAbility.value || 300;
+                        ent.x = target.x;
+                        ent.y = target.y;
+                        applyDamage(target, chargeDmg, ent);
+                        ent.chargeFrames = 300; // 5 second cooldown
+                        for (let k = 0; k < 12; k++) {
+                            const a = Math.random() * Math.PI * 2;
+                            s.particles.push({ id: generateId(), x: ent.x, y: ent.y, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3, color: 0xff8800, life: 25 });
+                        }
+                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💨突進!', life: 50, maxLife: 50, color: 0xff8800 });
+                    }
+                }
+            }
+
             if (target) {
                 if (minDist <= ent.range) {
                     if (ent.cooldown <= 0) {
                         ent.cooldown = ent.maxCooldown;
+
+                        // STEALTH: deactivate on first attack
+                        if (ent.stealthActive) ent.stealthActive = false;
+
+                        // BERSERK: boost attack when low HP
+                        let effectiveAttack = ent.attack;
+                        if (ent.passiveAbilities) {
+                            const berserk = ent.passiveAbilities.find(pa => pa.type === 'BERSERK');
+                            if (berserk && ent.hp < ent.maxHp * 0.5) {
+                                effectiveAttack = ent.attack * (berserk.value || 2.0);
+                            }
+                        }
+
                         const instantAoe = ent.passiveAbilities?.find(pa => pa.type === 'INSTANT_AOE');
                         if (instantAoe) {
                             // 弾なし：敵の位置に直接範囲ダメージ
@@ -783,20 +1015,76 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         } else {
                             const style = getProjectileStyle(ent.type);
                             if (style === 'sword_flash' || ent.range <= 60) {
-                                applyDamage(target, ent.attack, ent);
+                                applyDamage(target, effectiveAttack, ent);
+                                // KNOCKBACK: push target back
+                                if (ent.passiveAbilities) {
+                                    const knockback = ent.passiveAbilities.find(pa => pa.type === 'KNOCKBACK');
+                                    if (knockback) {
+                                        const kbDist = knockback.value || 120;
+                                        const kbAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
+                                        target.x += Math.cos(kbAngle) * kbDist;
+                                        target.y += Math.sin(kbAngle) * kbDist;
+                                    }
+                                }
                                 for (let k = 0; k < 3; k++) {
                                     const a = Math.random() * Math.PI * 2;
                                     s.particles.push({ id: generateId(), x: target.x, y: target.y, vx: Math.cos(a) * 1.5, vy: Math.sin(a) * 1.5, color: 0xffffff, life: 10 });
                                 }
                             } else {
-                                spawnProjectile(ent, target);
+                                // MACHINE_GUN: fire multiple shots in spread
+                                const machineGun = ent.passiveAbilities?.find(pa => pa.type === 'MACHINE_GUN');
+                                if (machineGun) {
+                                    const bulletCount = machineGun.value || 6;
+                                    const baseAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
+                                    for (let k = 0; k < bulletCount; k++) {
+                                        const spreadAngle = baseAngle + (Math.random() - 0.5) * (Math.PI / 1.5); // ±60 degrees
+                                        const dx2 = Math.cos(spreadAngle) * 2000;
+                                        const dy2 = Math.sin(spreadAngle) * 2000;
+                                        const projSpeed2 = 6;
+                                        s.projectiles.push({
+                                            id: generateId(),
+                                            x: ent.x, y: ent.y,
+                                            targetId: 'forward',
+                                            targetX: ent.x + dx2, targetY: ent.y + dy2,
+                                            speed: projSpeed2,
+                                            damage: ent.attack,
+                                            color: getProjectileColor(ent.type, ent.color),
+                                            style: 'arrow',
+                                            size: 6,
+                                            angle: spreadAngle,
+                                            trail: [],
+                                            isPiercing: false,
+                                            hitIds: new Set(),
+                                            maxDistance: ent.range,
+                                            distanceTraveled: 0,
+                                            sourceId: ent.id,
+                                            fromProjectile: true,
+                                        });
+                                    }
+                                } else {
+                                    // Store effective attack temporarily for projectile
+                                    const origAttack = ent.attack;
+                                    ent.attack = effectiveAttack;
+                                    spawnProjectile(ent, target);
+                                    ent.attack = origAttack;
+                                }
                             }
                         }
                     }
                 } else if (ent.faction === 'DEMON') {
+                    const prevX = ent.x;
+                    const prevY = ent.y;
                     const a = Math.atan2(target.y - ent.y, target.x - ent.x);
                     ent.x += Math.cos(a) * ent.speed * delta;
                     ent.y += Math.sin(a) * ent.speed * delta;
+                    // MOVE_REGEN
+                    if (ent.passiveAbilities) {
+                        const moveRegen = ent.passiveAbilities.find(pa => pa.type === 'MOVE_REGEN');
+                        if (moveRegen) {
+                            const moved = Math.hypot(ent.x - prevX, ent.y - prevY);
+                            ent.hp = Math.min(ent.maxHp, ent.hp + moved * (moveRegen.value || 0.05));
+                        }
+                    }
                 } else {
                     // HERO: ターゲットが射程外なら近づく
                     if (minDist > ent.range) {
@@ -807,16 +1095,25 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 }
             } else if (ent.faction === 'DEMON') {
                 // ターゲットなし: 敵陣中央へ前進
+                const prevX = ent.x;
+                const prevY = ent.y;
                 const a = Math.atan2(FIELD_HEIGHT / 2 - ent.y, BOARD_WIDTH * 1.5 - ent.x);
                 ent.x += Math.cos(a) * ent.speed * delta;
                 ent.y += Math.sin(a) * ent.speed * delta;
+                // MOVE_REGEN
+                if (ent.passiveAbilities) {
+                    const moveRegen = ent.passiveAbilities.find(pa => pa.type === 'MOVE_REGEN');
+                    if (moveRegen) {
+                        const moved = Math.hypot(ent.x - prevX, ent.y - prevY);
+                        ent.hp = Math.min(ent.maxHp, ent.hp + moved * (moveRegen.value || 0.05));
+                    }
+                }
             } else {
                 // HERO ターゲットなし: 魔王拠点へ前進
                 const a = Math.atan2(DEMON_BASE.y - ent.y, DEMON_BASE.x - ent.x);
                 ent.x += Math.cos(a) * ent.speed * delta;
                 ent.y += Math.sin(a) * ent.speed * delta;
             }
-
 
             // Separation
             const SEPARATION_RADIUS = 36;
@@ -881,22 +1178,68 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                     if (pa.type === 'SUMMON') {
                         if (s.frameCount % (pa.cooldown || 360) === 0) {
-                            // Summons a Zombie
-                            const stats = UNIT_STATS['zombie']!;
-                            const zombie: EntityState = {
-                                id: generateId(), type: 'ゾンビ', faction: 'DEMON',
+                            // Summons a skeleton_bone
+                            const stats = UNIT_STATS['skeleton_bone'] || UNIT_STATS['zombie']!;
+                            const skelId = generateId();
+                            const skel: EntityState = {
+                                id: skelId, type: 'skeleton_bone', faction: 'DEMON',
                                 x: ent.x + (Math.random() - 0.5) * 40,
                                 y: ent.y + (Math.random() - 0.5) * 40,
                                 hp: stats.maxHp!, maxHp: stats.maxHp!,
                                 attack: stats.attack!, range: stats.range!,
                                 speed: stats.speed!, cooldown: 0,
-                                maxCooldown: stats.maxCooldown!, color: stats.color!
+                                maxCooldown: stats.maxCooldown!, color: stats.color!,
+                                materialType: stats.materialType,
+                                attackType: stats.attackType,
+                                size: stats.size,
+                                accuracy: stats.accuracy,
+                                passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined,
+                                spawnedAt: s.frameCount,
                             };
-                            aliveEntities.push(zombie);
-                            s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '🧟召喚', life: 60, maxLife: 60, color: 0x44aa44 });
+                            aliveEntities.push(skel);
+                            s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💀召喚', life: 60, maxLife: 60, color: 0x44aa44 });
                         }
                     }
+                    if (pa.type === 'SELF_REGEN' && s.frameCount % 60 === 0) {
+                        // Self regen every 1s
+                        applyDamage(ent, -(pa.value || 30));
+                        if (Math.random() < 0.5) {
+                            s.particles.push({ id: generateId(), x: ent.x + (Math.random() - 0.5) * 15, y: ent.y, vx: 0, vy: -1.2, color: 0x44ff44, life: 25 });
+                        }
+                    }
+                    if (pa.type === 'HEAL_AURA' && s.frameCount % 60 === 0) {
+                        // Healing Aura (every 1s) - same as AURA_REGEN
+                        const range = pa.range || 120;
+                        const heel = pa.value || 8;
+                        entities.forEach(other => {
+                            if (other.faction === 'DEMON' && other.hp > 0 && Math.hypot(other.x - ent.x, other.y - ent.y) < range) {
+                                applyDamage(other, -heel);
+                                if (Math.random() < 0.4) {
+                                    s.particles.push({ id: generateId(), x: other.x + (Math.random() - 0.5) * 15, y: other.y, vx: 0, vy: -1.2, color: 0x88ffaa, life: 25 });
+                                }
+                            }
+                        });
+                        for (let k = 0; k < 6; k++) {
+                            const a = Math.random() * Math.PI * 2;
+                            s.particles.push({ id: generateId(), x: ent.x + Math.cos(a) * range, y: ent.y + Math.sin(a) * range, vx: -Math.cos(a) * 0.5, vy: -Math.sin(a) * 0.5, color: 0x88ffaa, life: 30 });
+                        }
+                    }
+                    if (pa.type === 'POISON') {
+                        // Poison tick: damage poisoned entities each frame
+                        // (applied to entities that have poisonedFrames > 0)
+                    }
                 });
+            }
+
+            // POISON tick damage for poisoned entity
+            if (ent.poisonedFrames !== undefined && ent.poisonedFrames > 0) {
+                // Find cerberus_spirit passive value for damage
+                // We stored the damage per second as a custom value per entity - use a fixed 20/s here
+                ent.hp -= (20 / 60) * delta;
+                ent.poisonedFrames -= delta;
+                if (s.frameCount % 20 === 0) {
+                    s.particles.push({ id: generateId(), x: ent.x + (Math.random() - 0.5) * 15, y: ent.y, vx: (Math.random() - 0.5) * 1, vy: -0.8, color: 0x44ff88, life: 20 });
+                }
             }
 
             ent.x = Math.max(20, Math.min(fieldWidth - 20, ent.x));
@@ -941,7 +1284,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     if (t.faction === 'HERO' && t.hp > 0) {
                         if (Math.hypot(t.x - proj.x, t.y - proj.y) < BLOCK_SIZE / 2) {
                             const attacker = proj.sourceId ? entityMap.get(proj.sourceId) : undefined;
-                            applyDamage(t, proj.damage, attacker);
+                            applyDamage(t, proj.damage, attacker, proj.fromProjectile);
                             hitAnything = true;
                             break;
                         }
@@ -959,8 +1302,61 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     const t = entityMap.get(proj.targetId!);
                     if (t && t.hp > 0) {
                         const attacker = proj.sourceId ? entityMap.get(proj.sourceId) : undefined;
-                        applyDamage(t, proj.damage, attacker);
+                        applyDamage(t, proj.damage, attacker, proj.fromProjectile);
                         hitAnything = true;
+
+                        // AOE_ON_HIT: deal AoE damage around hit target
+                        if (attacker && attacker.passiveAbilities) {
+                            const aoeOnHit = attacker.passiveAbilities.find(pa => pa.type === 'AOE_ON_HIT');
+                            if (aoeOnHit) {
+                                const aoeR = aoeOnHit.range || 80;
+                                const aoeDmg = aoeOnHit.value || 60;
+                                aliveEntities.forEach(other => {
+                                    if (other.faction === 'HERO' && other.hp > 0 && other.id !== t.id) {
+                                        if (Math.hypot(other.x - t.x, other.y - t.y) <= aoeR) {
+                                            applyDamage(other, aoeDmg, attacker, false);
+                                        }
+                                    }
+                                });
+                                s.aoeFlashes.push({ id: generateId(), x: t.x, y: t.y, radius: 10, maxRadius: aoeR, life: 15, maxLife: 15, color: 0xaa55ff });
+                            }
+                        }
+
+                        // BOUNCE_SHOT: bounce to another target
+                        if (proj.bouncesLeft !== undefined && proj.bouncesLeft > 0 && attacker) {
+                            let closestBounceTarget: EntityState | null = null;
+                            let closestBounceDist = Infinity;
+                            for (const other of aliveEntities) {
+                                if (other.faction === 'HERO' && other.hp > 0 && other.id !== t.id && !proj.hitIds?.has(other.id)) {
+                                    const bd = Math.hypot(other.x - t.x, other.y - t.y);
+                                    if (bd < closestBounceDist) { closestBounceDist = bd; closestBounceTarget = other; }
+                                }
+                            }
+                            if (closestBounceTarget) {
+                                const newHitIds = new Set(proj.hitIds || []);
+                                newHitIds.add(t.id);
+                                s.projectiles.push({
+                                    id: generateId(),
+                                    x: t.x, y: t.y,
+                                    targetId: closestBounceTarget.id,
+                                    targetX: closestBounceTarget.x, targetY: closestBounceTarget.y,
+                                    speed: proj.speed,
+                                    damage: proj.damage * 0.7,
+                                    color: proj.color,
+                                    style: proj.style,
+                                    size: proj.size,
+                                    angle: proj.angle,
+                                    trail: [],
+                                    isPiercing: false,
+                                    hitIds: newHitIds,
+                                    maxDistance: Infinity,
+                                    distanceTraveled: 0,
+                                    sourceId: proj.sourceId,
+                                    bouncesLeft: proj.bouncesLeft - 1,
+                                    fromProjectile: true,
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -983,7 +1379,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         const d = Math.hypot(t.x - proj.x, t.y - proj.y);
                         if (d < BLOCK_SIZE / 2) {
                             const attacker = proj.sourceId ? entityMap.get(proj.sourceId) : undefined;
-                            applyDamage(t, proj.damage, attacker);
+                            applyDamage(t, proj.damage, attacker, proj.fromProjectile);
                             if (proj.hitIds) proj.hitIds.add(t.id);
                             // Visual feedback for piercing hit
                             for (let k = 0; k < 2; k++) {

@@ -713,11 +713,17 @@ const RitualPhase: React.FC = () => {
                             const targetR = wildcardR !== -1 ? wildcardR : r + Math.floor(pR / 2);
                             const targetC = wildcardC !== -1 ? wildcardC : c + Math.floor(pC / 2);
 
-                            summons.push({
-                                id: generateId(), type: unitType,
-                                r: targetR, c: targetC,
-                                attackBonus: 0, hpBonus: 0
-                            });
+                            // DOUBLE_SPAWN: push twice if unit has DOUBLE_SPAWN passive
+                            const unitStats = UNIT_STATS[unitType];
+                            const hasDoubleSpawn = unitStats?.passiveAbilities?.some((pa: { type: string }) => pa.type === 'DOUBLE_SPAWN');
+                            const spawnCount = hasDoubleSpawn ? 2 : 1;
+                            for (let sp = 0; sp < spawnCount; sp++) {
+                                summons.push({
+                                    id: generateId(), type: unitType,
+                                    r: targetR, c: targetC,
+                                    attackBonus: 0, hpBonus: 0
+                                });
+                            }
                             recipeIds.push(recipe.id);
                             matchGroups.push([...currentMatchCells]);
                         }
