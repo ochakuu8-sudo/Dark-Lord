@@ -1116,21 +1116,21 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
 
             // Separation
-            const SEPARATION_RADIUS = 36;
             for (let j = 0; j < entities.length; j++) {
                 if (i === j) continue;
                 const other = entities[j];
                 if (other.faction === ent.faction && other.hp > 0) {
+                    const sepRadius = (ent.size ?? 18) + (other.size ?? 18);
                     const dx = ent.x - other.x;
                     const dy = ent.y - other.y;
                     const distSq = dx * dx + dy * dy;
-                    if (distSq < SEPARATION_RADIUS * SEPARATION_RADIUS) {
+                    if (distSq < sepRadius * sepRadius) {
                         if (distSq < 0.01) {
                             ent.x += (Math.random() - 0.5) * 2;
                             ent.y += (Math.random() - 0.5) * 2;
                         } else {
                             const dist = Math.sqrt(distSq);
-                            const pushForce = (SEPARATION_RADIUS - dist) / SEPARATION_RADIUS;
+                            const pushForce = (sepRadius - dist) / sepRadius;
                             ent.x += (dx / dist) * pushForce * 2.0;
                             ent.y += (dy / dist) * pushForce * 2.0;
                         }
