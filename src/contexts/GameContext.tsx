@@ -205,9 +205,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             used.add(row);
             return row;
         };
-        const boss = (id: string, row = 4, col = 8): EnemyEntry => ({
-            id, type: 'ボス', row, col, isElite: false, hpScale: 1 + (day - 1) * 0.8
-        });
         const unit = (idx: number, type: HeroType, col: number, elite = false): EnemyEntry => ({
             id: `e-${day}-${idx}`, type, row: placeAt(col), col, isElite: elite
         });
@@ -232,7 +229,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
             const priests = Math.min(2 + day, 4);
             for (let i = 0; i < priests; i++) enemies.push(unit(100 + i, 'プリースト', 6 + (i % 2)));
-            enemies.push(boss(`boss-${day}`));
 
         } else if (pid === 'swarm') {
             // 雪崩: 農夫・村人の大量配置
@@ -242,7 +238,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const col = Math.floor(Math.random() * 5); // col 0〜4
                 enemies.push(unit(i, type, col, day >= 2 && Math.random() < 0.1));
             }
-            enemies.push(boss(`boss-${day}`, 0, 8));
 
         } else if (pid === 'archer_wall') {
             // 弓兵殲滅陣: 後衛に弓兵・魔法使い密集
@@ -254,7 +249,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const col = 5 + (i % 3); // col 5〜7
                 enemies.push(unit(i + 1, type, col));
             }
-            enemies.push(boss(`boss-${day}`));
 
         } else if (pid === 'vip_guard') {
             // 精鋭護衛隊: 勇者を聖騎士/重騎士が囲む
@@ -277,7 +271,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const type = types[Math.floor(Math.random() * types.length)];
                 enemies.push({ id: `e-${day}-${i}`, type, row, col });
             }
-            enemies.push(boss(`boss-${day}`, 4, 8));
 
         } else if (pid === 'priest_loop') {
             // 支援完結型: プリースト縦列＋聖騎士タンク
@@ -285,7 +278,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             for (let i = 0; i < priestCount; i++) enemies.push(unit(i, 'プリースト', 4 + (i % 3)));
             const knightCount = 2 + Math.floor(day / 2);
             for (let i = 0; i < knightCount; i++) enemies.push(unit(100 + i, '聖騎士', i % 3));
-            enemies.push(boss(`boss-${day}`));
 
         } else if (pid === 'phased') {
             // 波状攻撃: タンク→中衛→後衛の3層
@@ -302,7 +294,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const t: HeroType = Math.random() < 0.5 ? '弓兵' : '魔法使い';
                 enemies.push(unit(perLayer * 2 + i, t, 6 + (i % 2)));
             }
-            enemies.push(boss(`boss-${day}`));
 
         } else if (pid === 'speed_rush') {
             // 奇襲隊: 農夫・剣士のみ col 0〜3 に大量展開
@@ -311,7 +302,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const type: HeroType = Math.random() < 0.6 ? '農夫' : '剣士';
                 enemies.push(unit(i, type, i % 4, day >= 2 && Math.random() < 0.15));
             }
-            enemies.push(boss(`boss-${day}`, 8, 8));
 
         } else {
             // フォールバック: 従来のランダム編成
@@ -325,7 +315,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const FORMATION: Record<string, number> = { '重騎士': 0, 'パラディン': 0, '剣士': 1, '村人': 1, '農夫': 2, '弓兵': 5, '魔法使い': 6, '大魔道士': 7 };
                 enemies.push(unit(i, type, FORMATION[type] ?? 4, day >= 2 && Math.random() < 0.1));
             }
-            enemies.push(boss(`boss-${day}`));
         }
 
         setIncomingEnemies(enemies);

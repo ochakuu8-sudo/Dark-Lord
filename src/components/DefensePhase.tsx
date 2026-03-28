@@ -1558,20 +1558,19 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         }
         s.projectiles = aliveProjectiles;
 
-        // Lose condition: DEMONが全滅
-        if (demonCount === 0 && heroCount > 0 && !s.phaseEnded) {
-            s.phaseEnded = true;
-            setTimeout(() => setPhase('RESULT'), 1500);
-        }
-
-        // Win condition: 城が破壊された
-        const castleAlive = aliveEntities.some(e => e.type === 'ボス' && e.faction === 'HERO');
-        if (!castleAlive && s.waveInProgress && !s.phaseEnded) {
+        // Win condition: 英雄軍が全滅
+        if (heroCount === 0 && demonCount > 0 && s.waveInProgress && !s.phaseEnded) {
             s.phaseEnded = true;
             setTimeout(() => {
                 incrementDay();
                 setPhase('RITUAL');
             }, 2000);
+        }
+
+        // Lose condition: DEMONが全滅
+        if (demonCount === 0 && !s.phaseEnded) {
+            s.phaseEnded = true;
+            setTimeout(() => setPhase('RESULT'), 1500);
         }
 
         // Particles
@@ -1687,7 +1686,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         stateRef.current.entities.forEach(ent => {
             const isBoss = ent.id.startsWith('boss-');
-            const sz = ent.type === 'ボス' ? 35 : isBoss ? 30 : (ent.faction === 'HERO' ? 15 : (ent.size ?? 18));
+            const sz = isBoss ? 30 : (ent.faction === 'HERO' ? 15 : (ent.size ?? 18));
             const isElite = ent.faction === 'HERO' && stateRef.current.eliteIds.has(ent.id);
             let g = entityGfxPool.current.get(ent.id);
 
@@ -1699,19 +1698,14 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 // Initial persistent elements (drawn once per entity creation)
                 const outC = isElite ? 0xffd700 : ent.faction === 'HERO' ? 0xffaaaa : 0xaaffaa;
                 g.beginFill(ent.color);
-                if (ent.type === 'ボス') {
-                    // ボス: 星形っぽく大きい菱形
-                    g.drawPolygon([0, -sz, sz * 0.6, -sz * 0.6, sz, 0, sz * 0.6, sz * 0.6, 0, sz, -sz * 0.6, sz * 0.6, -sz, 0, -sz * 0.6, -sz * 0.6]);
-                } else if (ent.faction === 'HERO') {
+                if (ent.faction === 'HERO') {
                     g.drawRect(-sz, -sz, sz * 2, sz * 2);
                 } else {
                     g.drawCircle(0, 0, sz);
                 }
                 g.endFill();
-                g.lineStyle(ent.type === 'ボス' ? 3 : 1.5, ent.type === 'ボス' ? 0xffff00 : outC, 0.9);
-                if (ent.type === 'ボス') {
-                    g.drawPolygon([0, -sz, sz * 0.6, -sz * 0.6, sz, 0, sz * 0.6, sz * 0.6, 0, sz, -sz * 0.6, sz * 0.6, -sz, 0, -sz * 0.6, -sz * 0.6]);
-                } else if (ent.faction === 'HERO') {
+                g.lineStyle(1.5, outC, 0.9);
+                if (ent.faction === 'HERO') {
                     g.drawRect(-sz, -sz, sz * 2, sz * 2);
                 } else {
                     g.drawCircle(0, 0, sz);
