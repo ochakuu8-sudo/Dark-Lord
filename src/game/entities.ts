@@ -53,9 +53,9 @@ const DEMON_SPEED = 0.8;
 
 export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     // --- Skeleton Derivations (Base: 骨2+X, コモン・中距離) ---
-    'skeleton_bone':   { maxHp: 700, attack: 80,  range: 150, speed: DEMON_SPEED * 0.9, maxCooldown: 50, color: 0xaaaacc, materialType: 0, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'DOUBLE_SPAWN' }] },
-    'skeleton_meat':   { maxHp: 500, attack: 110, range: 150, speed: DEMON_SPEED,       maxCooldown: 45, color: 0xff9999, materialType: 1, attackType: 'ranged', size: 15, accuracy: 1, passiveAbilities: [{ type: 'ON_DEATH_SPAWN', value: 0 }] },
-    'skeleton_spirit': { maxHp: 350, attack: 70,  range: 280, speed: DEMON_SPEED * 0.85, maxCooldown: 55, color: 0xcc88ff, materialType: 2, attackType: 'ranged', size: 12, accuracy: 1, passiveAbilities: [{ type: 'UNTARGETABLE' }] },
+    'skeleton_bone':   { maxHp: 700, attack: 80,  range: 150, speed: DEMON_SPEED * 0.9, maxCooldown: 50, color: 0xaaaacc, materialType: 0, attackType: 'ranged', size: 10, accuracy: 1, passiveAbilities: [{ type: 'DOUBLE_SPAWN' }] },
+    'skeleton_meat':   { maxHp: 500, attack: 110, range: 150, speed: DEMON_SPEED,       maxCooldown: 45, color: 0xff9999, materialType: 1, attackType: 'ranged', size: 11, accuracy: 1, passiveAbilities: [{ type: 'ON_DEATH_SPAWN', value: 0 }] },
+    'skeleton_spirit': { maxHp: 350, attack: 70,  range: 280, speed: DEMON_SPEED * 0.85, maxCooldown: 55, color: 0xcc88ff, materialType: 2, attackType: 'ranged', size: 9, accuracy: 1, passiveAbilities: [{ type: 'UNTARGETABLE' }] },
 
     // --- Cerberus Derivations (Base: 肉2+X, コモン・高速近接) ---
     'cerberus_bone':   { maxHp: 600, attack: 90,  range: 50, speed: DEMON_SPEED * 1.1, maxCooldown: 5,  color: 0xddccaa, materialType: 0, attackType: 'melee',  size: 22, accuracy: 1, passiveAbilities: [{ type: 'RAPID_FIRE' }] },
