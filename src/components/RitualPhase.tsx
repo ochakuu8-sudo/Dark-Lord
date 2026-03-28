@@ -191,31 +191,32 @@ const RitualPhase: React.FC = () => {
             if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
             const ctx = audioCtxRef.current;
             if (ctx.state === 'suspended') ctx.resume();
-            // ペンタトニックスケールで上昇
             const freqs = [440, 523, 659, 784, 988, 1175];
             const freq = freqs[Math.min(comboN - 1, freqs.length - 1)];
+            // 後半になるほど音量を下げる
+            const vol = Math.max(0.06, 0.2 - comboN * 0.015);
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.connect(gain);
             gain.connect(ctx.destination);
-            osc.type = comboN >= 5 ? 'square' : comboN >= 3 ? 'triangle' : 'sine';
+            osc.type = 'sine';
             osc.frequency.value = freq;
-            gain.gain.setValueAtTime(0.2, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+            gain.gain.setValueAtTime(vol, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
             osc.start(ctx.currentTime);
-            osc.stop(ctx.currentTime + 0.35);
-            if (comboN >= 5) {
-                // FEVERは和音追加
+            osc.stop(ctx.currentTime + 0.3);
+            // コンボ3以上で和音追加（音量は控えめ固定）
+            if (comboN >= 3) {
                 const osc2 = ctx.createOscillator();
                 const gain2 = ctx.createGain();
                 osc2.connect(gain2);
                 gain2.connect(ctx.destination);
                 osc2.type = 'sine';
-                osc2.frequency.value = freq * 1.5;
-                gain2.gain.setValueAtTime(0.1, ctx.currentTime);
-                gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+                osc2.frequency.value = freq * 1.25;
+                gain2.gain.setValueAtTime(0.04, ctx.currentTime);
+                gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
                 osc2.start(ctx.currentTime);
-                osc2.stop(ctx.currentTime + 0.5);
+                osc2.stop(ctx.currentTime + 0.3);
             }
         } catch (_) { /* AudioContext unavailable */ }
     }, []);
@@ -751,20 +752,23 @@ const RitualPhase: React.FC = () => {
         const { summons, matchGroups } = result;
         if (summons.length === 0) { onComplete?.([]); return; }
 
-        // 1召喚ごとにコンボ演出
-        const STEP_MS = 450;
+        // 1召喚ごとにコンボ演出（コンボ数が増えるほど加速）
+        let cumulativeMs = 0;
         matchGroups.forEach((cells, i) => {
+            const stepMs = Math.max(150, 450 - i * 30);
+            const delay = cumulativeMs;
             setTimeout(() => {
                 setFlashCells(cells);
                 setComboCount(i + 1);
                 setComboKey(k => k + 1);
                 playComboSound(i + 1);
-                setTimeout(() => setFlashCells([]), 380);
-            }, i * STEP_MS);
+                setTimeout(() => setFlashCells([]), Math.min(380, stepMs - 50));
+            }, delay);
+            cumulativeMs += stepMs;
         });
 
-        // 全演出終了後にコールバック（素材はそのまま、グリッド変更なし）
-        const totalAnimMs = (matchGroups.length - 1) * STEP_MS + 420;
+        // 全演出終了後にコールバック
+        const totalAnimMs = cumulativeMs + 420 - (matchGroups.length > 0 ? Math.max(150, 450 - (matchGroups.length - 1) * 30) : 0);
         setTimeout(() => {
             setTimeout(() => setComboCount(0), 1400);
             onComplete?.(summons);
@@ -917,8 +921,8 @@ const RitualPhase: React.FC = () => {
         renderGrid(result?.matchedCells);
     }, [grid, renderGrid, findMatches]);
 
-    const comboLabel = comboCount >= 5 ? '🔥 FEVER!!' : comboCount >= 3 ? '⚡ GREAT!' : `${comboCount} COMBO!`;
-    const comboColor = comboCount >= 5 ? '#ff4400' : comboCount >= 3 ? '#ffaa00' : '#66ddff';
+    const comboLabel = `${comboCount} COMBO!`;
+    const comboColor = comboCount >= 8 ? '#ff2200' : comboCount >= 5 ? '#ff8800' : comboCount >= 3 ? '#ffdd00' : '#66ddff';
 
     // 召喚プレビュー（現在マッチしている魔物リスト）
     const summonPreview = expectedSummons.reduce<Record<string, number>>((acc, u) => {
@@ -1254,7 +1258,7 @@ const RitualPhase: React.FC = () => {
                         animation: 'comboAppear 1.4s ease-out forwards'
                     }}>
                         <div style={{
-                            fontSize: comboCount >= 5 ? '64px' : '48px', fontWeight: 900,
+                            fontSize: `${Math.min(80, 40 + comboCount * 4)}px`, fontWeight: 900,
                             color: comboColor,
                             textShadow: `0 0 20px ${comboColor}, 0 0 40px ${comboColor}, 2px 2px 0 #000`,
                             letterSpacing: '4px', userSelect: 'none',
