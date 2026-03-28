@@ -53,19 +53,19 @@ const DEMON_SPEED = 0.8;
 
 export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     // --- Skeleton Derivations (Base: 骨2+X, コモン・中距離) ---
-    'skeleton_bone':   { maxHp: 700, attack: 80,  range: 150, speed: DEMON_SPEED,       maxCooldown: 50, color: 0xaaaacc, materialType: 0, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'DOUBLE_SPAWN' }] },
-    'skeleton_meat':   { maxHp: 500, attack: 110, range: 150, speed: DEMON_SPEED * 1.1, maxCooldown: 45, color: 0xff9999, materialType: 1, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'ON_DEATH_SPAWN', value: 0 }] },
-    'skeleton_spirit': { maxHp: 350, attack: 70,  range: 280, speed: DEMON_SPEED,       maxCooldown: 55, color: 0xcc88ff, materialType: 2, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'UNTARGETABLE' }] },
+    'skeleton_bone':   { maxHp: 700, attack: 80,  range: 150, speed: DEMON_SPEED * 0.9, maxCooldown: 50, color: 0xaaaacc, materialType: 0, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'DOUBLE_SPAWN' }] },
+    'skeleton_meat':   { maxHp: 500, attack: 110, range: 150, speed: DEMON_SPEED,       maxCooldown: 45, color: 0xff9999, materialType: 1, attackType: 'ranged', size: 15, accuracy: 1, passiveAbilities: [{ type: 'ON_DEATH_SPAWN', value: 0 }] },
+    'skeleton_spirit': { maxHp: 350, attack: 70,  range: 280, speed: DEMON_SPEED * 0.85, maxCooldown: 55, color: 0xcc88ff, materialType: 2, attackType: 'ranged', size: 12, accuracy: 1, passiveAbilities: [{ type: 'UNTARGETABLE' }] },
 
     // --- Cerberus Derivations (Base: 肉2+X, コモン・高速近接) ---
-    'cerberus_bone':   { maxHp: 600, attack: 90,  range: 50, speed: DEMON_SPEED * 1.1, maxCooldown: 5,  color: 0xddccaa, materialType: 0, attackType: 'melee',  size: 18, accuracy: 1, passiveAbilities: [{ type: 'RAPID_FIRE' }] },
-    'cerberus_meat':   { maxHp: 850, attack: 130, range: 50, speed: DEMON_SPEED * 1.2, maxCooldown: 35, color: 0xff7777, materialType: 1, attackType: 'melee',  size: 20, accuracy: 1, passiveAbilities: [{ type: 'LIFESTEAL', value: 0.3 }] },
-    'cerberus_spirit': { maxHp: 400, attack: 85,  range: 180, speed: DEMON_SPEED,      maxCooldown: 50, color: 0xbb88ff, materialType: 2, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'POISON', value: 20, range: 180 }] },
+    'cerberus_bone':   { maxHp: 600, attack: 90,  range: 50, speed: DEMON_SPEED * 1.1, maxCooldown: 5,  color: 0xddccaa, materialType: 0, attackType: 'melee',  size: 22, accuracy: 1, passiveAbilities: [{ type: 'RAPID_FIRE' }] },
+    'cerberus_meat':   { maxHp: 850, attack: 130, range: 50, speed: DEMON_SPEED * 1.2, maxCooldown: 35, color: 0xff7777, materialType: 1, attackType: 'melee',  size: 24, accuracy: 1, passiveAbilities: [{ type: 'LIFESTEAL', value: 0.3 }] },
+    'cerberus_spirit': { maxHp: 400, attack: 85,  range: 180, speed: DEMON_SPEED,      maxCooldown: 50, color: 0xbb88ff, materialType: 2, attackType: 'ranged', size: 20, accuracy: 1, passiveAbilities: [{ type: 'POISON', value: 20, range: 180 }] },
 
     // --- Lich Derivations (Base: 霊3+X, コモン・遠距離浮遊) ---
-    'lich_bone':   { maxHp: 550, attack: 130, range: 300, speed: DEMON_SPEED * 0.8, maxCooldown: 60, color: 0xeeeeff, materialType: 0, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'BOUNCE_SHOT', value: 2 }] },
-    'lich_meat':   { maxHp: 750, attack: 110, range: 200, speed: DEMON_SPEED * 0.8, maxCooldown: 55, color: 0xffaaaa, materialType: 1, attackType: 'ranged', size: 20, accuracy: 1, passiveAbilities: [{ type: 'HEAL_AURA', value: 8, range: 120 }] },
-    'lich_spirit': { maxHp: 350, attack: 160, range: 420, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xaa55ff, materialType: 2, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'AOE_ON_HIT', value: 60, range: 80 }] },
+    'lich_bone':   { maxHp: 550, attack: 130, range: 300, speed: DEMON_SPEED * 0.8, maxCooldown: 60, color: 0xeeeeff, materialType: 0, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'BOUNCE_SHOT', value: 2 }] },
+    'lich_meat':   { maxHp: 750, attack: 110, range: 200, speed: DEMON_SPEED * 0.8, maxCooldown: 55, color: 0xffaaaa, materialType: 1, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'HEAL_AURA', value: 8, range: 120 }] },
+    'lich_spirit': { maxHp: 350, attack: 160, range: 420, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xaa55ff, materialType: 2, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'AOE_ON_HIT', value: 60, range: 80 }] },
 
     // --- Goblin Derivations (Base: 3マッチ雑魚・APループ燃料) ---
     'goblin_bone':   { maxHp: 80,  attack: 15, range: 40, speed: DEMON_SPEED * 1.2, maxCooldown: 40, color: 0xaaaaaa, materialType: 0, attackType: 'melee', size: 12, accuracy: 1 },
@@ -88,9 +88,9 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'necromancer_spirit': { maxHp: 350, attack: 100, range: 180, speed: DEMON_SPEED * 0.8, maxCooldown: 80,  color: 0x7700cc, materialType: 2, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'ENEMY_DEATH_SPAWN', value: 2 }] },
 
     // --- Wisp Derivations ---
-    'wisp_bone':   { maxHp: 250, attack: 300, range: 80,  speed: DEMON_SPEED * 1.3, maxCooldown: 60, color: 0xeeeeff, materialType: 0, attackType: 'melee', size: 14, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_PROJECTILE', value: 200 }] },
-    'wisp_meat':   { maxHp: 450, attack: 400, range: 80,  speed: DEMON_SPEED * 1.1, maxCooldown: 60, color: 0xff9999, materialType: 1, attackType: 'melee', size: 16, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_HEAL', value: 300, range: 120 }] },
-    'wisp_spirit': { maxHp: 200, attack: 250, range: 100, speed: DEMON_SPEED * 1.5, maxCooldown: 60, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 12, accuracy: 1, passiveAbilities: [{ type: 'CHARGE_EXPLOSION', value: 100 }] },
+    'wisp_bone':   { maxHp: 250, attack: 300, range: 80,  speed: DEMON_SPEED * 1.8, maxCooldown: 60, color: 0xeeeeff, materialType: 0, attackType: 'melee', size: 12, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_PROJECTILE', value: 200 }] },
+    'wisp_meat':   { maxHp: 450, attack: 400, range: 80,  speed: DEMON_SPEED * 1.6, maxCooldown: 60, color: 0xff9999, materialType: 1, attackType: 'melee', size: 14, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_HEAL', value: 300, range: 120 }] },
+    'wisp_spirit': { maxHp: 200, attack: 250, range: 100, speed: DEMON_SPEED * 2.2, maxCooldown: 60, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 10, accuracy: 1, passiveAbilities: [{ type: 'CHARGE_EXPLOSION', value: 100 }] },
 
     // --- Minotaur Derivations (Base: 肉骨骨+X, レア・突進) ---
     'minotaur_bone':   { maxHp: 1200, attack: 150, range: 50, speed: DEMON_SPEED * 0.9, maxCooldown: 45, color: 0xddaa77, materialType: 0, attackType: 'melee', size: 24, accuracy: 1, passiveAbilities: [{ type: 'CHARGE', value: 300, range: 200 }] },
