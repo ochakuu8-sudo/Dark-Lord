@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UNIT_STATS, PASSIVE_DESCRIPTIONS } from '../game/entities';
 import { ALL_RECIPES, RELICS, COLOR_HEX, PIECE_EMOJIS, RARITY_COLOR, RARITY_LABEL } from '../game/config';
+import UnitSprite from './UnitSprite';
 
 interface BestiaryModalProps {
     isOpen: boolean;
@@ -149,14 +150,17 @@ const BestiaryModal: React.FC<BestiaryModalProps> = ({ isOpen, onClose }) => {
                                                             transition: 'background 0.15s',
                                                         }}
                                                     >
-                                                        {/* バリアント名 + カラーサークル */}
+                                                        {/* バリアント名 + スプライト or カラーサークル */}
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                            <div style={{
-                                                                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                                                                backgroundColor: unitColor,
-                                                                boxShadow: `0 0 10px ${unitColor}88`,
-                                                                border: '2px solid rgba(255,255,255,0.15)',
-                                                            }} />
+                                                            {unitId?.startsWith('skeleton_')
+                                                                ? <UnitSprite unitId={unitId} width={52} height={65} />
+                                                                : <div style={{
+                                                                    width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                                                                    backgroundColor: unitColor,
+                                                                    boxShadow: `0 0 10px ${unitColor}88`,
+                                                                    border: '2px solid rgba(255,255,255,0.15)',
+                                                                }} />
+                                                            }
                                                             <div style={{ fontSize: '13px', fontWeight: 'bold', color: matInfo.color }}>
                                                                 {matInfo.emoji} {matInfo.name}{recipe.name}
                                                             </div>
