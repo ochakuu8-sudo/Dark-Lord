@@ -52,6 +52,7 @@ interface Projectile {
     duration?: number;
     sourceId?: string;
     bouncesLeft?: number;
+    lifetime?: number;        // remaining frames for timed projectiles (e.g. lich_bone bounce chain)
     fromProjectile?: boolean; // true if from a projectile (for RANGED_RESIST)
 }
 
@@ -502,9 +503,13 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         // Check for BOUNCE_SHOT ability
         let bouncesLeft = 0;
+        let projLifetime: number | undefined;
         if (attacker.passiveAbilities) {
             const bounceAbility = attacker.passiveAbilities.find(pa => pa.type === 'BOUNCE_SHOT');
-            if (bounceAbility) bouncesLeft = bounceAbility.value || 2;
+            if (bounceAbility) {
+                bouncesLeft = bounceAbility.value || 2;
+                projLifetime = 240; // 4 seconds of bouncing at 60fps
+            }
         }
 
         s.projectiles.push({
@@ -528,6 +533,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             areaMultiplier,
             sourceId: attacker.id,
             bouncesLeft,
+            lifetime: projLifetime,
             fromProjectile: true,
         });
     };
@@ -952,26 +958,127 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
             if (ent.cooldown > 0) ent.cooldown -= delta;
 
-            // CHARGE cooldown
+            // MACHINE_GUN queue: fire one random-direction shot per interval
+            if (ent.machineGunQueue && ent.machineGunQueue > 0) {
+                if (ent.machineGunCooldown === undefined) ent.machineGunCooldown = 0;
+                if (ent.machineGunCooldown > 0) {
+                    ent.machineGunCooldown -= delta;
+                } else {
+                    const randomAngle = Math.random() * Math.PI * 2;
+                    const rdx = Math.cos(randomAngle) * 2000;
+                    const rdy = Math.sin(randomAngle) * 2000;
+                    s.projectiles.push({
+                        id: generateId(),
+                        x: ent.x, y: ent.y,
+                        targetId: 'forward',
+                        targetX: ent.x + rdx, targetY: ent.y + rdy,
+                        speed: 6,
+                        damage: ent.attack,
+                        color: getProjectileColor(ent.type, ent.color),
+                        style: 'arrow',
+                        size: 5,
+                        angle: randomAngle,
+                        trail: [],
+                        isPiercing: false,
+                        hitIds: new Set(),
+                        maxDistance: ent.range * 1.5,
+                        distanceTraveled: 0,
+                        sourceId: ent.id,
+                        fromProjectile: true,
+                    });
+                    ent.machineGunQueue--;
+                    ent.machineGunCooldown = 8; // ~7.5 shots/sec
+                }
+            }
+
+            // CHARGE cooldown (post-dash)
             if (ent.chargeFrames !== undefined && ent.chargeFrames > 0) ent.chargeFrames -= delta;
 
-            // CHARGE ability: rush at target when within range
-            if (ent.faction === 'DEMON' && ent.passiveAbilities && target) {
+            // CHARGE: windup countdown
+            if (ent.chargeWindup !== undefined && ent.chargeWindup > 0) {
+                ent.chargeWindup -= delta;
+                // Building charge particles
+                if (s.frameCount % 5 === 0) {
+                    const a = Math.random() * Math.PI * 2;
+                    s.particles.push({ id: generateId(), x: ent.x + Math.cos(a) * 22, y: ent.y + Math.sin(a) * 22, vx: -Math.cos(a) * 1.8, vy: -Math.sin(a) * 1.8, color: 0xff8800, life: 22 });
+                }
+                // Windup complete → start dash toward nearest enemy
+                if (ent.chargeWindup <= 0) {
+                    ent.chargeWindup = 0;
+                    const chargeAbility = ent.passiveAbilities?.find(pa => pa.type === 'CHARGE');
+                    let dashTarget: EntityState | null = null;
+                    let dashDist = Infinity;
+                    for (const other of entities) {
+                        if (other.faction === 'HERO' && other.hp > 0) {
+                            const d = Math.hypot(other.x - ent.x, other.y - ent.y);
+                            if (d < dashDist) { dashDist = d; dashTarget = other; }
+                        }
+                    }
+                    if (dashTarget) {
+                        const dashAngle = Math.atan2(dashTarget.y - ent.y, dashTarget.x - ent.x);
+                        ent.isDashing = true;
+                        ent.dashVx = Math.cos(dashAngle) * 20;
+                        ent.dashVy = Math.sin(dashAngle) * 20;
+                        ent.dashFrames = 40;
+                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💨突進!', life: 45, maxLife: 45, color: 0xff6600 });
+                    }
+                    ent.chargeFrames = chargeAbility?.cooldown ?? 360;
+                }
+            }
+
+            // CHARGE: dash movement and collision
+            if (ent.isDashing) {
+                ent.dashFrames = (ent.dashFrames ?? 0) - delta;
+                ent.x += (ent.dashVx || 0) * delta;
+                ent.y += (ent.dashVy || 0) * delta;
+                const chargeAbility = ent.passiveAbilities?.find(pa => pa.type === 'CHARGE');
+                const chargeDmg = chargeAbility?.value || 300;
+                const aoeR = 80;
+                let dashHit = false;
+                for (const other of entities) {
+                    if (other.faction === 'HERO' && other.hp > 0 && Math.hypot(other.x - ent.x, other.y - ent.y) < 44) {
+                        // AoE around collision point
+                        entities.forEach(victim => {
+                            if (victim.faction === 'HERO' && victim.hp > 0 && Math.hypot(victim.x - ent.x, victim.y - ent.y) <= aoeR) {
+                                applyDamage(victim, chargeDmg, ent);
+                            }
+                        });
+                        s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: aoeR, life: 22, maxLife: 22, color: 0xff6600 });
+                        // KNOCKBACK on charge hit
+                        const knockback = ent.passiveAbilities?.find(pa => pa.type === 'KNOCKBACK');
+                        if (knockback) {
+                            const kbDist = knockback.value || 120;
+                            const kbAngle = Math.atan2(other.y - ent.y, other.x - ent.x);
+                            other.x += Math.cos(kbAngle) * kbDist;
+                            other.y += Math.sin(kbAngle) * kbDist;
+                        }
+                        for (let k = 0; k < 16; k++) {
+                            const a = Math.random() * Math.PI * 2;
+                            s.particles.push({ id: generateId(), x: ent.x, y: ent.y, vx: Math.cos(a) * 5, vy: Math.sin(a) * 5, color: 0xff8800, life: 28 });
+                        }
+                        ent.isDashing = false;
+                        dashHit = true;
+                        break;
+                    }
+                }
+                if (!dashHit && ent.dashFrames !== undefined && ent.dashFrames <= 0) {
+                    ent.isDashing = false;
+                }
+            }
+
+            // CHARGE ability: trigger windup when enemy enters range
+            if (ent.faction === 'DEMON' && ent.passiveAbilities && target && !ent.isDashing &&
+                (ent.chargeWindup === undefined || ent.chargeWindup <= 0)) {
                 const chargeAbility = ent.passiveAbilities.find(pa => pa.type === 'CHARGE');
                 if (chargeAbility && (ent.chargeFrames === undefined || ent.chargeFrames <= 0)) {
                     const chargeTriggerRange = chargeAbility.range || 200;
                     if (minDist <= chargeTriggerRange) {
-                        // Rush to target
-                        const chargeDmg = chargeAbility.value || 300;
-                        ent.x = target.x;
-                        ent.y = target.y;
-                        applyDamage(target, chargeDmg, ent);
-                        ent.chargeFrames = 300; // 5 second cooldown
-                        for (let k = 0; k < 12; k++) {
+                        ent.chargeWindup = 90; // 1.5 sec windup
+                        for (let k = 0; k < 8; k++) {
                             const a = Math.random() * Math.PI * 2;
-                            s.particles.push({ id: generateId(), x: ent.x, y: ent.y, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3, color: 0xff8800, life: 25 });
+                            s.particles.push({ id: generateId(), x: ent.x + Math.cos(a) * 18, y: ent.y + Math.sin(a) * 18, vx: -Math.cos(a), vy: -Math.sin(a), color: 0xff8800, life: 30 });
                         }
-                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💨突進!', life: 50, maxLife: 50, color: 0xff8800 });
+                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '⚡溜め中…', life: 90, maxLife: 90, color: 0xffaa00 });
                     }
                 }
             }
@@ -1015,52 +1122,57 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         } else {
                             const style = getProjectileStyle(ent.type);
                             if (style === 'sword_flash' || ent.range <= 60) {
-                                applyDamage(target, effectiveAttack, ent);
-                                // KNOCKBACK: push target back
-                                if (ent.passiveAbilities) {
-                                    const knockback = ent.passiveAbilities.find(pa => pa.type === 'KNOCKBACK');
-                                    if (knockback) {
-                                        const kbDist = knockback.value || 120;
-                                        const kbAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
-                                        target.x += Math.cos(kbAngle) * kbDist;
-                                        target.y += Math.sin(kbAngle) * kbDist;
+                                // FRONTAL_AOE: cone sweep hitting all enemies in forward arc
+                                const frontalAoe = ent.passiveAbilities?.find(pa => pa.type === 'FRONTAL_AOE');
+                                if (frontalAoe) {
+                                    const faceAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
+                                    const coneHalf = Math.PI / 3; // ±60° = 120° total cone
+                                    const aoeR = frontalAoe.range || ent.range;
+                                    let hitCount = 0;
+                                    entities.forEach(other => {
+                                        if (other.faction === 'HERO' && other.hp > 0) {
+                                            const d = Math.hypot(other.x - ent.x, other.y - ent.y);
+                                            if (d <= aoeR) {
+                                                const aToOther = Math.atan2(other.y - ent.y, other.x - ent.x);
+                                                let diff = Math.abs(aToOther - faceAngle);
+                                                if (diff > Math.PI) diff = Math.PI * 2 - diff;
+                                                if (diff <= coneHalf) {
+                                                    applyDamage(other, effectiveAttack * (frontalAoe.value || 1.0), ent);
+                                                    hitCount++;
+                                                }
+                                            }
+                                        }
+                                    });
+                                    // Sweep arc flash
+                                    s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: aoeR, life: 12, maxLife: 12, color: ent.color });
+                                    for (let k = 0; k < 6 + hitCount * 2; k++) {
+                                        const a = faceAngle + (Math.random() - 0.5) * coneHalf * 2;
+                                        const spd = 2 + Math.random() * 3;
+                                        s.particles.push({ id: generateId(), x: ent.x, y: ent.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, color: ent.color, life: 18 });
                                     }
-                                }
-                                for (let k = 0; k < 3; k++) {
-                                    const a = Math.random() * Math.PI * 2;
-                                    s.particles.push({ id: generateId(), x: target.x, y: target.y, vx: Math.cos(a) * 1.5, vy: Math.sin(a) * 1.5, color: 0xffffff, life: 10 });
+                                } else {
+                                    applyDamage(target, effectiveAttack, ent);
+                                    // KNOCKBACK: push target back
+                                    if (ent.passiveAbilities) {
+                                        const knockback = ent.passiveAbilities.find(pa => pa.type === 'KNOCKBACK');
+                                        if (knockback) {
+                                            const kbDist = knockback.value || 120;
+                                            const kbAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
+                                            target.x += Math.cos(kbAngle) * kbDist;
+                                            target.y += Math.sin(kbAngle) * kbDist;
+                                        }
+                                    }
+                                    for (let k = 0; k < 3; k++) {
+                                        const a = Math.random() * Math.PI * 2;
+                                        s.particles.push({ id: generateId(), x: target.x, y: target.y, vx: Math.cos(a) * 1.5, vy: Math.sin(a) * 1.5, color: 0xffffff, life: 10 });
+                                    }
                                 }
                             } else {
-                                // MACHINE_GUN: fire multiple shots in spread
+                                // MACHINE_GUN: queue burst (fires one shot at a time)
                                 const machineGun = ent.passiveAbilities?.find(pa => pa.type === 'MACHINE_GUN');
                                 if (machineGun) {
-                                    const bulletCount = machineGun.value || 6;
-                                    const baseAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
-                                    for (let k = 0; k < bulletCount; k++) {
-                                        const spreadAngle = baseAngle + (Math.random() - 0.5) * (Math.PI / 1.5); // ±60 degrees
-                                        const dx2 = Math.cos(spreadAngle) * 2000;
-                                        const dy2 = Math.sin(spreadAngle) * 2000;
-                                        const projSpeed2 = 6;
-                                        s.projectiles.push({
-                                            id: generateId(),
-                                            x: ent.x, y: ent.y,
-                                            targetId: 'forward',
-                                            targetX: ent.x + dx2, targetY: ent.y + dy2,
-                                            speed: projSpeed2,
-                                            damage: ent.attack,
-                                            color: getProjectileColor(ent.type, ent.color),
-                                            style: 'arrow',
-                                            size: 6,
-                                            angle: spreadAngle,
-                                            trail: [],
-                                            isPiercing: false,
-                                            hitIds: new Set(),
-                                            maxDistance: ent.range,
-                                            distanceTraveled: 0,
-                                            sourceId: ent.id,
-                                            fromProjectile: true,
-                                        });
-                                    }
+                                    ent.machineGunQueue = machineGun.value || 6;
+                                    ent.machineGunCooldown = 0; // fire first shot immediately
                                 } else {
                                     // Store effective attack temporarily for projectile
                                     const origAttack = ent.attack;
@@ -1072,17 +1184,20 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         }
                     }
                 } else if (ent.faction === 'DEMON') {
-                    const prevX = ent.x;
-                    const prevY = ent.y;
-                    const a = Math.atan2(target.y - ent.y, target.x - ent.x);
-                    ent.x += Math.cos(a) * ent.speed * delta;
-                    ent.y += Math.sin(a) * ent.speed * delta;
-                    // MOVE_REGEN
-                    if (ent.passiveAbilities) {
-                        const moveRegen = ent.passiveAbilities.find(pa => pa.type === 'MOVE_REGEN');
-                        if (moveRegen) {
-                            const moved = Math.hypot(ent.x - prevX, ent.y - prevY);
-                            ent.hp = Math.min(ent.maxHp, ent.hp + moved * (moveRegen.value || 0.05));
+                    // Skip movement during windup or dash
+                    if (!ent.isDashing && !(ent.chargeWindup && ent.chargeWindup > 0)) {
+                        const prevX = ent.x;
+                        const prevY = ent.y;
+                        const a = Math.atan2(target.y - ent.y, target.x - ent.x);
+                        ent.x += Math.cos(a) * ent.speed * delta;
+                        ent.y += Math.sin(a) * ent.speed * delta;
+                        // MOVE_REGEN
+                        if (ent.passiveAbilities) {
+                            const moveRegen = ent.passiveAbilities.find(pa => pa.type === 'MOVE_REGEN');
+                            if (moveRegen) {
+                                const moved = Math.hypot(ent.x - prevX, ent.y - prevY);
+                                ent.hp = Math.min(ent.maxHp, ent.hp + moved * (moveRegen.value || 0.05));
+                            }
                         }
                     }
                 } else {
@@ -1094,18 +1209,20 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                 }
             } else if (ent.faction === 'DEMON') {
-                // ターゲットなし: 敵陣中央へ前進
-                const prevX = ent.x;
-                const prevY = ent.y;
-                const a = Math.atan2(FIELD_HEIGHT / 2 - ent.y, BOARD_WIDTH * 1.5 - ent.x);
-                ent.x += Math.cos(a) * ent.speed * delta;
-                ent.y += Math.sin(a) * ent.speed * delta;
-                // MOVE_REGEN
-                if (ent.passiveAbilities) {
-                    const moveRegen = ent.passiveAbilities.find(pa => pa.type === 'MOVE_REGEN');
-                    if (moveRegen) {
-                        const moved = Math.hypot(ent.x - prevX, ent.y - prevY);
-                        ent.hp = Math.min(ent.maxHp, ent.hp + moved * (moveRegen.value || 0.05));
+                // ターゲットなし: 敵陣中央へ前進 (溜め/突進中はスキップ)
+                if (!ent.isDashing && !(ent.chargeWindup && ent.chargeWindup > 0)) {
+                    const prevX = ent.x;
+                    const prevY = ent.y;
+                    const a = Math.atan2(FIELD_HEIGHT / 2 - ent.y, BOARD_WIDTH * 1.5 - ent.x);
+                    ent.x += Math.cos(a) * ent.speed * delta;
+                    ent.y += Math.sin(a) * ent.speed * delta;
+                    // MOVE_REGEN
+                    if (ent.passiveAbilities) {
+                        const moveRegen = ent.passiveAbilities.find(pa => pa.type === 'MOVE_REGEN');
+                        if (moveRegen) {
+                            const moved = Math.hypot(ent.x - prevX, ent.y - prevY);
+                            ent.hp = Math.min(ent.maxHp, ent.hp + moved * (moveRegen.value || 0.05));
+                        }
                     }
                 }
             } else {
@@ -1254,6 +1371,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         const aliveProjectiles: Projectile[] = [];
         for (const proj of s.projectiles) {
+            // Lifetime-based projectiles (e.g. lich_bone bounce chain)
+            if (proj.lifetime !== undefined) {
+                proj.lifetime -= delta;
+                if (proj.lifetime <= 0) continue;
+            }
             // Update target position if target still alive (EXCEPT for Piercing/Area which are coordinate-based)
             if (proj.targetId !== 'base' && proj.targetId !== 'hero_base' && proj.targetId !== 'forward' && !proj.isPiercing && !proj.isArea) {
                 const liveTarget = entityMap.get(proj.targetId);
@@ -1322,39 +1444,43 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                             }
                         }
 
-                        // BOUNCE_SHOT: bounce to another target
+                        // BOUNCE_SHOT: bounce to another target (lifetime-based for lich_bone)
                         if (proj.bouncesLeft !== undefined && proj.bouncesLeft > 0 && attacker) {
-                            let closestBounceTarget: EntityState | null = null;
-                            let closestBounceDist = Infinity;
-                            for (const other of aliveEntities) {
-                                if (other.faction === 'HERO' && other.hp > 0 && other.id !== t.id && !proj.hitIds?.has(other.id)) {
-                                    const bd = Math.hypot(other.x - t.x, other.y - t.y);
-                                    if (bd < closestBounceDist) { closestBounceDist = bd; closestBounceTarget = other; }
+                            // Only bounce if still has lifetime remaining (or no lifetime set)
+                            if (proj.lifetime === undefined || proj.lifetime > 0) {
+                                let closestBounceTarget: EntityState | null = null;
+                                let closestBounceDist = Infinity;
+                                for (const other of aliveEntities) {
+                                    if (other.faction === 'HERO' && other.hp > 0 && other.id !== t.id && !proj.hitIds?.has(other.id)) {
+                                        const bd = Math.hypot(other.x - t.x, other.y - t.y);
+                                        if (bd < closestBounceDist) { closestBounceDist = bd; closestBounceTarget = other; }
+                                    }
                                 }
-                            }
-                            if (closestBounceTarget) {
-                                const newHitIds = new Set(proj.hitIds || []);
-                                newHitIds.add(t.id);
-                                s.projectiles.push({
-                                    id: generateId(),
-                                    x: t.x, y: t.y,
-                                    targetId: closestBounceTarget.id,
-                                    targetX: closestBounceTarget.x, targetY: closestBounceTarget.y,
-                                    speed: proj.speed,
-                                    damage: proj.damage * 0.7,
-                                    color: proj.color,
-                                    style: proj.style,
-                                    size: proj.size,
-                                    angle: proj.angle,
-                                    trail: [],
-                                    isPiercing: false,
-                                    hitIds: newHitIds,
-                                    maxDistance: Infinity,
-                                    distanceTraveled: 0,
-                                    sourceId: proj.sourceId,
-                                    bouncesLeft: proj.bouncesLeft - 1,
-                                    fromProjectile: true,
-                                });
+                                if (closestBounceTarget) {
+                                    const newHitIds = new Set(proj.hitIds || []);
+                                    newHitIds.add(t.id);
+                                    s.projectiles.push({
+                                        id: generateId(),
+                                        x: t.x, y: t.y,
+                                        targetId: closestBounceTarget.id,
+                                        targetX: closestBounceTarget.x, targetY: closestBounceTarget.y,
+                                        speed: proj.speed,
+                                        damage: proj.damage * 0.85,
+                                        color: proj.color,
+                                        style: proj.style,
+                                        size: proj.size,
+                                        angle: proj.angle,
+                                        trail: [],
+                                        isPiercing: false,
+                                        hitIds: newHitIds,
+                                        maxDistance: Infinity,
+                                        distanceTraveled: 0,
+                                        sourceId: proj.sourceId,
+                                        bouncesLeft: proj.bouncesLeft - 1,
+                                        lifetime: proj.lifetime, // carry remaining lifetime
+                                        fromProjectile: true,
+                                    });
+                                }
                             }
                         }
                     }

@@ -3,7 +3,7 @@ export interface PassiveAbility {
         'BERSERK' | 'SELF_REGEN' | 'LIFESTEAL' | 'POISON' |
         'DOUBLE_SPAWN' | 'ON_DEATH_SPAWN' | 'UNTARGETABLE' |
         'RAPID_FIRE' | 'MACHINE_GUN' | 'BOUNCE_SHOT' |
-        'HEAL_AURA' | 'AOE_ON_HIT' |
+        'HEAL_AURA' | 'AOE_ON_HIT' | 'FRONTAL_AOE' |
         'EXPLODE_PROJECTILE' | 'EXPLODE_HEAL' | 'CHARGE_EXPLOSION' |
         'ALLY_DEATH_EXPLOSION' | 'ENEMY_DEATH_SPAWN' |
         'CHARGE' | 'KNOCKBACK' | 'RANGED_RESIST' |
@@ -35,7 +35,14 @@ export interface EntityState {
     // Temporary runtime fields
     poisonedFrames?: number;
     stealthActive?: boolean;
-    chargeFrames?: number;   // cooldown for CHARGE ability
+    chargeFrames?: number;   // post-dash cooldown for CHARGE ability
+    chargeWindup?: number;   // windup frames remaining (>0 = winding up)
+    isDashing?: boolean;     // true while dashing
+    dashVx?: number;
+    dashVy?: number;
+    dashFrames?: number;     // remaining dash duration
+    machineGunQueue?: number;    // shots remaining in burst queue
+    machineGunCooldown?: number; // frames until next queued shot
     distanceTraveled?: number; // for MOVE_REGEN
     spawnedAt?: number;      // frame number when spawned (for CHARGE_EXPLOSION)
     prevX?: number;          // previous frame position for movement tracking
@@ -63,7 +70,7 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'cerberus_spirit': { maxHp: 400, attack: 85,  range: 180, speed: DEMON_SPEED,      maxCooldown: 50, color: 0xbb88ff, materialType: 2, attackType: 'ranged', size: 20, accuracy: 1, passiveAbilities: [{ type: 'POISON', value: 20, range: 180 }] },
 
     // --- Lich Derivations (Base: 霊3+X, コモン・遠距離浮遊) ---
-    'lich_bone':   { maxHp: 550, attack: 130, range: 300, speed: DEMON_SPEED * 0.8, maxCooldown: 60, color: 0xeeeeff, materialType: 0, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'BOUNCE_SHOT', value: 2 }] },
+    'lich_bone':   { maxHp: 550, attack: 130, range: 300, speed: DEMON_SPEED * 0.8, maxCooldown: 60, color: 0xeeeeff, materialType: 0, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'BOUNCE_SHOT', value: 999 }] },
     'lich_meat':   { maxHp: 750, attack: 110, range: 200, speed: DEMON_SPEED * 0.8, maxCooldown: 55, color: 0xffaaaa, materialType: 1, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'HEAL_AURA', value: 8, range: 120 }] },
     'lich_spirit': { maxHp: 350, attack: 160, range: 420, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xaa55ff, materialType: 2, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'AOE_ON_HIT', value: 60, range: 80 }] },
 
@@ -72,10 +79,10 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'goblin_meat':   { maxHp: 120, attack: 20, range: 40, speed: DEMON_SPEED * 1.4, maxCooldown: 30, color: 0xff8888, materialType: 1, attackType: 'melee', size: 12, accuracy: 1 },
     'goblin_spirit': { maxHp: 60,  attack: 10, range: 80, speed: DEMON_SPEED * 1.5, maxCooldown: 25, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 10, accuracy: 1 },
 
-    // --- Orc Derivations (Base: Melee) ---
-    'orc_bone':   { maxHp: 2000, attack: 50, range: 45, speed: DEMON_SPEED,       maxCooldown: 60, color: 0xcccccc, materialType: 0, attackType: 'melee', size: 26, accuracy: 1, passiveAbilities: [{ type: 'REFLECT', value: 0.3 }] },
-    'orc_meat':   { maxHp: 1250, attack: 75, range: 45, speed: DEMON_SPEED,       maxCooldown: 70, color: 0xff6666, materialType: 1, attackType: 'melee', size: 24, accuracy: 1, passiveAbilities: [{ type: 'BERSERK', value: 2.0 }] },
-    'orc_spirit': { maxHp: 700,  attack: 60, range: 45, speed: DEMON_SPEED * 1.2, maxCooldown: 50, color: 0xaa66ff, materialType: 2, attackType: 'melee', size: 20, accuracy: 1, passiveAbilities: [{ type: 'SELF_REGEN', value: 30 }] },
+    // --- Orc Derivations (Base: Melee, 前方扇形AOE) ---
+    'orc_bone':   { maxHp: 2000, attack: 50, range: 60, speed: DEMON_SPEED,       maxCooldown: 100, color: 0xcccccc, materialType: 0, attackType: 'melee', size: 26, accuracy: 1, passiveAbilities: [{ type: 'FRONTAL_AOE', range: 60, value: 1.0 }, { type: 'REFLECT', value: 0.3 }] },
+    'orc_meat':   { maxHp: 1250, attack: 75, range: 60, speed: DEMON_SPEED,       maxCooldown: 115, color: 0xff6666, materialType: 1, attackType: 'melee', size: 24, accuracy: 1, passiveAbilities: [{ type: 'FRONTAL_AOE', range: 60, value: 1.0 }, { type: 'BERSERK', value: 2.0 }] },
+    'orc_spirit': { maxHp: 700,  attack: 60, range: 60, speed: DEMON_SPEED * 1.2, maxCooldown: 85,  color: 0xaa66ff, materialType: 2, attackType: 'melee', size: 20, accuracy: 1, passiveAbilities: [{ type: 'FRONTAL_AOE', range: 60, value: 1.0 }, { type: 'SELF_REGEN', value: 30 }] },
 
     // --- Archer Derivations (Base: 骨3+X, コモン・遠距離) ---
     'archer_bone':   { maxHp: 300, attack: 200, range: 630, speed: DEMON_SPEED,       maxCooldown: 80, color: 0xdddddd, materialType: 0, attackType: 'ranged', size: 16, accuracy: 1 },
@@ -93,9 +100,10 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'wisp_spirit': { maxHp: 200, attack: 250, range: 100, speed: DEMON_SPEED * 2.2, maxCooldown: 60, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 10, accuracy: 1, passiveAbilities: [{ type: 'CHARGE_EXPLOSION', value: 100 }] },
 
     // --- Minotaur Derivations (Base: 肉骨骨+X, レア・突進) ---
-    'minotaur_bone':   { maxHp: 1200, attack: 150, range: 50, speed: DEMON_SPEED * 0.9, maxCooldown: 45, color: 0xddaa77, materialType: 0, attackType: 'melee', size: 24, accuracy: 1, passiveAbilities: [{ type: 'CHARGE', value: 300, range: 200 }] },
-    'minotaur_meat':   { maxHp: 1500, attack: 130, range: 50, speed: DEMON_SPEED * 1.0, maxCooldown: 40, color: 0xff5555, materialType: 1, attackType: 'melee', size: 26, accuracy: 1, passiveAbilities: [{ type: 'RANGED_RESIST', value: 0.5 }, { type: 'CHARGE', value: 250, range: 150 }] },
-    'minotaur_spirit': { maxHp: 900,  attack: 110, range: 50, speed: DEMON_SPEED * 1.1, maxCooldown: 35, color: 0x9966ff, materialType: 2, attackType: 'melee', size: 22, accuracy: 1, passiveAbilities: [{ type: 'CHARGE', value: 200, range: 150 }, { type: 'KNOCKBACK', value: 120 }] },
+    // value=突進AoEダメージ, range=溜め開始トリガー距離, cooldown=突進後クールダウン(frames)
+    'minotaur_bone':   { maxHp: 1200, attack: 150, range: 50, speed: DEMON_SPEED * 0.9, maxCooldown: 45, color: 0xddaa77, materialType: 0, attackType: 'melee', size: 24, accuracy: 1, passiveAbilities: [{ type: 'CHARGE', value: 350, range: 260, cooldown: 360 }] },
+    'minotaur_meat':   { maxHp: 1500, attack: 130, range: 50, speed: DEMON_SPEED * 1.0, maxCooldown: 40, color: 0xff5555, materialType: 1, attackType: 'melee', size: 26, accuracy: 1, passiveAbilities: [{ type: 'RANGED_RESIST', value: 0.5 }, { type: 'CHARGE', value: 300, range: 220, cooldown: 300 }] },
+    'minotaur_spirit': { maxHp: 900,  attack: 110, range: 50, speed: DEMON_SPEED * 1.1, maxCooldown: 35, color: 0x9966ff, materialType: 2, attackType: 'melee', size: 22, accuracy: 1, passiveAbilities: [{ type: 'CHARGE', value: 250, range: 200, cooldown: 270 }, { type: 'KNOCKBACK', value: 120 }] },
 
     // --- Ghoul Derivations (Base: 霊肉+X 十字, レア・高速) ---
     'ghoul_bone':   { maxHp: 500, attack: 80,  range: 50, speed: DEMON_SPEED * 1.5, maxCooldown: 30, color: 0xaaddaa, materialType: 0, attackType: 'melee', size: 16, accuracy: 1, passiveAbilities: [{ type: 'TARGET_LOWEST_HP' }] },
@@ -146,6 +154,7 @@ export const PASSIVE_DESCRIPTIONS: Record<string, string> = {
     'BOUNCE_SHOT': '弾が命中後に近くの別の敵へバウンスする。',
     'HEAL_AURA': '周囲の味方のHPを徐々に回復する。',
     'AOE_ON_HIT': '弾が命中した際に周囲の敵にも範囲ダメージを与える。',
+    'FRONTAL_AOE': '攻撃時、正面の扇形範囲内の全敵にダメージを与える。',
     'EXPLODE_PROJECTILE': '死亡時に4方向へ貫通弾を発射する。',
     'EXPLODE_HEAL': '死亡時の爆発で周囲の味方を回復する。',
     'CHARGE_EXPLOSION': '生存時間が長いほど死亡時爆発ダメージが増加する。',
