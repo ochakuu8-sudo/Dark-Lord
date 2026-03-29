@@ -34,7 +34,7 @@ export const ALL_RECIPES: Recipe[] = [
     // ── スケルトン (骨主体) ──
     {
         id: 'skeleton_bone',
-        name: 'スケルトン(骨)',
+        name: 'ドッペル',
         rarity: 'common',
         pattern: [
             [0,  0], // 骨 骨
@@ -44,7 +44,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'skeleton_meat',
-        name: 'スケルトン(肉)',
+        name: 'マルティル',
         rarity: 'common',
         pattern: [
             [0, -1], // 骨 ·
@@ -54,7 +54,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'skeleton_spirit',
-        name: 'スケルトン(霊)',
+        name: 'ファントム',
         rarity: 'common',
         pattern: [
             [0], // 骨
@@ -67,7 +67,7 @@ export const ALL_RECIPES: Recipe[] = [
     // ── オーク (肉主体) ──
     {
         id: 'orc_bone',
-        name: 'オーク(骨)',
+        name: 'バリケード',
         rarity: 'common',
         pattern: [
             [1,  0], // 肉 骨
@@ -77,7 +77,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'orc_meat',
-        name: 'オーク(肉)',
+        name: 'バーサーカー',
         rarity: 'common',
         pattern: [
             [1, 1, 1], // 肉 肉 肉
@@ -86,7 +86,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'orc_spirit',
-        name: 'オーク(霊)',
+        name: 'シャーマン',
         rarity: 'common',
         pattern: [
             [1, -1], // 肉 ·
@@ -98,7 +98,7 @@ export const ALL_RECIPES: Recipe[] = [
     // ── アーチャー (骨主体・縦) ──
     {
         id: 'archer_bone',
-        name: 'アーチャー(骨)',
+        name: 'スナイパー',
         rarity: 'common',
         pattern: [
             [0], // 骨
@@ -110,7 +110,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'archer_meat',
-        name: 'アーチャー(肉)',
+        name: 'ガトリング',
         rarity: 'common',
         pattern: [
             [0], // 骨
@@ -121,7 +121,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'archer_spirit',
-        name: 'アーチャー(霊)',
+        name: 'ピアサー',
         rarity: 'common',
         pattern: [
             [0,  0], // 骨 骨
@@ -133,7 +133,7 @@ export const ALL_RECIPES: Recipe[] = [
     // ── ケルベロス (肉主体・横) ──
     {
         id: 'cerberus_bone',
-        name: 'ケルベロス(骨)',
+        name: 'ヘルハウンド',
         rarity: 'common',
         pattern: [
             [1, 0, 1], // 肉 骨 肉
@@ -142,7 +142,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'cerberus_meat',
-        name: 'ケルベロス(肉)',
+        name: 'ブラッドハウンド',
         rarity: 'common',
         pattern: [
             [1, 1], // 肉 肉
@@ -152,7 +152,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'cerberus_spirit',
-        name: 'ケルベロス(霊)',
+        name: 'ヴェノムハウンド',
         rarity: 'common',
         pattern: [
             [1, 2, 1], // 肉 霊 肉
@@ -163,7 +163,7 @@ export const ALL_RECIPES: Recipe[] = [
     // ── リッチ (霊主体) ──
     {
         id: 'lich_bone',
-        name: 'リッチ(骨)',
+        name: 'リコシェット',
         rarity: 'common',
         pattern: [
             [2,  2, -1], // 霊 霊 ·
@@ -173,7 +173,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'lich_meat',
-        name: 'リッチ(肉)',
+        name: 'サングレ',
         rarity: 'common',
         pattern: [
             [2,  1], // 霊 肉
@@ -183,7 +183,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'lich_spirit',
-        name: 'リッチ(霊)',
+        name: 'ノヴァ',
         rarity: 'common',
         pattern: [
             [2, 2, 2], // 霊 霊 霊
@@ -194,7 +194,7 @@ export const ALL_RECIPES: Recipe[] = [
     // ── ウィスプ (霊主体・拡散) ──
     {
         id: 'wisp_bone',
-        name: 'ウィスプ(骨)',
+        name: 'スパーク',
         rarity: 'common',
         pattern: [
             [2, -1], // 霊 ·
@@ -204,7 +204,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'wisp_meat',
-        name: 'ウィスプ(肉)',
+        name: 'メデック',
         rarity: 'common',
         pattern: [
             [-1, 2], // ·  霊
@@ -214,7 +214,7 @@ export const ALL_RECIPES: Recipe[] = [
     },
     {
         id: 'wisp_spirit',
-        name: 'ウィスプ(霊)',
+        name: 'カミカゼ',
         rarity: 'common',
         pattern: [
             [2, -1, -1], // 霊 ·  ·
@@ -321,6 +321,19 @@ export const RECIPE_EMOJIS: Record<string, string> = {
     necromancer: '🧟',
     minotaur:    '🐂',
     ghoul:       '👾',
+};
+
+// レアユニットのバリアント表示名
+export const RARE_VARIANT_NAMES: Record<string, string> = {
+    necromancer_bone:   'デスサモナー',
+    necromancer_meat:   'デスウィッチ',
+    necromancer_spirit: 'ソウルリーパー',
+    minotaur_bone:      'ゴアホーン',
+    minotaur_meat:      'バルワーク',
+    minotaur_spirit:    'サンダーホーフ',
+    ghoul_bone:         'フィニッシャー',
+    ghoul_meat:         'ハングリーグール',
+    ghoul_spirit:       'シャドウグール',
 };
 
 // ワイルドカード素材ごとのピース背景色 (0x形式)
