@@ -1043,7 +1043,7 @@ const RitualPhase: React.FC = () => {
 
     // ───── 下アクションバー（レシピ横並び） ─────
     const bottomContent = (
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', padding: '0 14px', gap: '12px', boxSizing: 'border-box' }}>
+        <div className="recipes-list" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', padding: '0 14px', gap: '12px', boxSizing: 'border-box', overflowX: 'auto', overflowY: 'hidden' }}>
             <div style={{ color: '#554466', fontSize: '10px', letterSpacing: '1px', flexShrink: 0 }}>📜</div>
             {activeRecipes.map(recipe => (
                 <div key={recipe.id}
