@@ -143,19 +143,10 @@ const BestiaryModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
     return (
         <div style={{
             position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.9)',
-            display: 'flex', justifyContent: 'center', alignItems: 'center',
-            zIndex: 1000, backdropFilter: 'blur(5px)',
+            zIndex: 1000,
+            background: '#05050e',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
-            <div style={{
-                width: '96vw', maxWidth: '1280px',
-                height: '94vh',
-                background: '#05050e',
-                borderRadius: 16,
-                border: '1px solid #2a1045',
-                display: 'flex', flexDirection: 'column', overflow: 'hidden',
-                boxShadow: '0 0 80px rgba(100,0,200,0.15)',
-            }}>
 
                 {/* ── ヘッダー ── */}
                 <div style={{
@@ -455,7 +446,6 @@ const BestiaryModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
                 }}>
                     "Darkness holds no secrets from those who wield it with purpose."
                 </div>
-            </div>
         </div>
     );
 };
