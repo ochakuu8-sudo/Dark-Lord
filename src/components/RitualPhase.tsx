@@ -766,17 +766,17 @@ const RitualPhase: React.FC = () => {
         const { summons, matchGroups } = result;
         if (summons.length === 0) { onComplete?.([]); return; }
 
-        // 1召喚ごとにコンボ演出（6msずつ線形加速、下限50ms）
+        // 1召喚ごとにコンボ演出（500msから10msずつ加速、下限20ms）
         let cumulativeMs = 0;
         matchGroups.forEach((cells, i) => {
-            const stepMs = Math.max(50, 450 - i * 8);
+            const stepMs = Math.max(20, 500 - i * 10);
             const delay = cumulativeMs;
             setTimeout(() => {
                 setFlashCells(cells);
                 setComboCount(i + 1);
                 setComboKey(k => k + 1);
                 playComboSound(i + 1);
-                setTimeout(() => setFlashCells([]), Math.max(30, stepMs - 30));
+                setTimeout(() => setFlashCells([]), Math.max(10, stepMs - 20));
             }, delay);
             cumulativeMs += stepMs;
         });
