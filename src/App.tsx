@@ -12,7 +12,10 @@ const getMainMaterial = (recipe: Recipe): 0 | 1 | 2 => {
   return counts.indexOf(Math.max(...counts)) as 0 | 1 | 2;
 };
 
-const COMMON_RECIPES = ALL_RECIPES.filter(r => r.rarity === 'common');
+// コモンレシピのうち3ピースのもの（I3・L3形）だけを抽出
+const COMMON_3PIECE_RECIPES = ALL_RECIPES.filter(r =>
+  r.rarity === 'common' && r.pattern.flat().filter(v => v >= 0 && v <= 2).length === 3
+);
 
 const GameController: React.FC = () => {
   const { phase, setPhase, resetGame, isDebugMode, setIsDebugMode, unlockRecipe, addEquippedRecipe } = useGame();
@@ -20,7 +23,7 @@ const GameController: React.FC = () => {
   const startNormalGame = () => {
     setIsDebugMode(false);
     const byMat: Record<number, Recipe[]> = { 0: [], 1: [], 2: [] };
-    COMMON_RECIPES.forEach(r => byMat[getMainMaterial(r)].push(r));
+    COMMON_3PIECE_RECIPES.forEach(r => byMat[getMainMaterial(r)].push(r));
     ([0, 1, 2] as const).forEach(mat => {
       const pool = byMat[mat];
       const recipe = pool[Math.floor(Math.random() * pool.length)];
