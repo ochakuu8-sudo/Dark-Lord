@@ -837,7 +837,7 @@ const RitualPhase: React.FC = () => {
         if (piecesDroppedThisDay.current) return;
         if (activeRecipes.length === 0) return;
         piecesDroppedThisDay.current = true;
-        dropNewPieces(15); // Day1=15ツモ(30p)
+        dropNewPieces(6); // Day1=6ツモ(12p)
     }, [currentDay, activeRecipes, dropNewPieces]);
 
     // Day2以降: レシピ選択後にドロップ
