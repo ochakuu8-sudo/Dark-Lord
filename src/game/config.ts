@@ -27,18 +27,30 @@ export interface Recipe {
 // 形ごとにロール（Melee=縦3, Tank=2x2, Ranged=横3, Magic=十字）を設定し、各色に用意する
 
 export const ALL_RECIPES: Recipe[] = [
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // COMMON: ワイルドなし、形＝ユニット確定
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // COMMON: 単色形のみ  9形状 × 3素材 = 27種
+    //
+    //  形一覧:
+    //   I3  縦3直線     → スケルトン
+    //   L3  L字(3)      → オーク
+    //   I4  縦4直線     → アーチャー
+    //   O4  2×2正方形   → ケルベロス
+    //   T4  T字         → リッチ
+    //   L4  Lテトロミノ → ウィスプ
+    //   J4  Jテトロミノ → ゴブリン
+    //   S4  Sテトロミノ → インプ
+    //   Z4  Zテトロミノ → バンシー
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    // ── スケルトン (骨主体) ──
+    // ── I3: 縦3直線 ── スケルトン
     {
         id: 'skeleton_bone',
         name: 'ドッペル',
         rarity: 'common',
         pattern: [
-            [0,  0], // 骨 骨
-            [0, -1], // 骨 ·
+            [0], // 骨
+            [0], // 骨
+            [0], // 骨
         ],
         reward: 1,
     },
@@ -47,8 +59,9 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'マルティル',
         rarity: 'common',
         pattern: [
-            [0, -1], // 骨 ·
-            [0,  1], // 骨 肉
+            [1], // 肉
+            [1], // 肉
+            [1], // 肉
         ],
         reward: 1,
     },
@@ -57,21 +70,21 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'ファントム',
         rarity: 'common',
         pattern: [
-            [0], // 骨
-            [0], // 骨
+            [2], // 霊
+            [2], // 霊
             [2], // 霊
         ],
         reward: 1,
     },
 
-    // ── オーク (肉主体) ──
+    // ── L3: L字(3) ── オーク
     {
         id: 'orc_bone',
         name: 'バリケード',
         rarity: 'common',
         pattern: [
-            [1,  0], // 肉 骨
-            [1, -1], // 肉 ·
+            [0,  0], // 骨 骨
+            [0, -1], // 骨 ·
         ],
         reward: 1,
     },
@@ -80,7 +93,8 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'バーサーカー',
         rarity: 'common',
         pattern: [
-            [1, 1, 1], // 肉 肉 肉
+            [1,  1], // 肉 肉
+            [1, -1], // 肉 ·
         ],
         reward: 1,
     },
@@ -89,13 +103,13 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'シャーマン',
         rarity: 'common',
         pattern: [
-            [1, -1], // 肉 ·
-            [1,  2], // 肉 霊
+            [2,  2], // 霊 霊
+            [2, -1], // 霊 ·
         ],
         reward: 1,
     },
 
-    // ── アーチャー (骨主体・縦) ──
+    // ── I4: 縦4直線 ── アーチャー
     {
         id: 'archer_bone',
         name: 'スナイパー',
@@ -113,9 +127,10 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'ガトリング',
         rarity: 'common',
         pattern: [
-            [0], // 骨
             [1], // 肉
-            [0], // 骨
+            [1], // 肉
+            [1], // 肉
+            [1], // 肉
         ],
         reward: 2,
     },
@@ -124,21 +139,24 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'ピアサー',
         rarity: 'common',
         pattern: [
-            [0,  0], // 骨 骨
-            [-1, 2], // ·  霊
+            [2], // 霊
+            [2], // 霊
+            [2], // 霊
+            [2], // 霊
         ],
         reward: 2,
     },
 
-    // ── ケルベロス (肉主体・横) ──
+    // ── O4: 2×2正方形 ── ケルベロス
     {
         id: 'cerberus_bone',
         name: 'ヘルハウンド',
         rarity: 'common',
         pattern: [
-            [1, 0, 1], // 肉 骨 肉
+            [0, 0], // 骨 骨
+            [0, 0], // 骨 骨
         ],
-        reward: 1,
+        reward: 2,
     },
     {
         id: 'cerberus_meat',
@@ -148,26 +166,27 @@ export const ALL_RECIPES: Recipe[] = [
             [1, 1], // 肉 肉
             [1, 1], // 肉 肉
         ],
-        reward: 1,
+        reward: 2,
     },
     {
         id: 'cerberus_spirit',
         name: 'ヴェノムハウンド',
         rarity: 'common',
         pattern: [
-            [1, 2, 1], // 肉 霊 肉
+            [2, 2], // 霊 霊
+            [2, 2], // 霊 霊
         ],
-        reward: 1,
+        reward: 2,
     },
 
-    // ── リッチ (霊主体) ──
+    // ── T4: T字 ── リッチ
     {
         id: 'lich_bone',
         name: 'リコシェット',
         rarity: 'common',
         pattern: [
-            [2,  2, -1], // 霊 霊 ·
-            [0, -1, -1], // 骨 ·  ·
+            [-1, 0, -1], // ·  骨 ·
+            [ 0, 0,  0], // 骨 骨 骨
         ],
         reward: 2,
     },
@@ -176,8 +195,8 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'サングレ',
         rarity: 'common',
         pattern: [
-            [2,  1], // 霊 肉
-            [2, -1], // 霊 ·
+            [-1, 1, -1], // ·  肉 ·
+            [ 1, 1,  1], // 肉 肉 肉
         ],
         reward: 2,
     },
@@ -186,19 +205,21 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'ノヴァ',
         rarity: 'common',
         pattern: [
-            [2, 2, 2], // 霊 霊 霊
+            [-1, 2, -1], // ·  霊 ·
+            [ 2, 2,  2], // 霊 霊 霊
         ],
         reward: 2,
     },
 
-    // ── ウィスプ (霊主体・拡散) ──
+    // ── L4: Lテトロミノ ── ウィスプ
     {
         id: 'wisp_bone',
         name: 'スパーク',
         rarity: 'common',
         pattern: [
-            [2, -1], // 霊 ·
-            [0,  2], // 骨 霊
+            [0, -1], // 骨 ·
+            [0, -1], // 骨 ·
+            [0,  0], // 骨 骨
         ],
         reward: 2,
     },
@@ -207,8 +228,9 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'メデック',
         rarity: 'common',
         pattern: [
-            [-1, 2], // ·  霊
-            [ 1, 2], // 肉 霊
+            [1, -1], // 肉 ·
+            [1, -1], // 肉 ·
+            [1,  1], // 肉 肉
         ],
         reward: 2,
     },
@@ -217,9 +239,108 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'カミカゼ',
         rarity: 'common',
         pattern: [
-            [2, -1, -1], // 霊 ·  ·
-            [-1, 2, -1], // ·  霊 ·
-            [-1, -1, 2], // ·  ·  霊
+            [2, -1], // 霊 ·
+            [2, -1], // 霊 ·
+            [2,  2], // 霊 霊
+        ],
+        reward: 2,
+    },
+
+    // ── J4: Jテトロミノ ── ゴブリン
+    {
+        id: 'goblin_bone',
+        name: 'ポイズナー',
+        rarity: 'common',
+        pattern: [
+            [-1, 0], // ·  骨
+            [-1, 0], // ·  骨
+            [ 0, 0], // 骨 骨
+        ],
+        reward: 2,
+    },
+    {
+        id: 'goblin_meat',
+        name: 'ウォークライ',
+        rarity: 'common',
+        pattern: [
+            [-1, 1], // ·  肉
+            [-1, 1], // ·  肉
+            [ 1, 1], // 肉 肉
+        ],
+        reward: 2,
+    },
+    {
+        id: 'goblin_spirit',
+        name: 'ドラム',
+        rarity: 'common',
+        pattern: [
+            [-1, 2], // ·  霊
+            [-1, 2], // ·  霊
+            [ 2, 2], // 霊 霊
+        ],
+        reward: 2,
+    },
+
+    // ── S4: Sテトロミノ ── インプ
+    {
+        id: 'imp_bone',
+        name: 'テイカー',
+        rarity: 'common',
+        pattern: [
+            [-1, 0, 0], // ·  骨 骨
+            [ 0, 0, -1], // 骨 骨 ·
+        ],
+        reward: 2,
+    },
+    {
+        id: 'imp_meat',
+        name: 'ドクター',
+        rarity: 'common',
+        pattern: [
+            [-1, 1, 1], // ·  肉 肉
+            [ 1, 1, -1], // 肉 肉 ·
+        ],
+        reward: 2,
+    },
+    {
+        id: 'imp_spirit',
+        name: 'ネクロ',
+        rarity: 'common',
+        pattern: [
+            [-1, 2, 2], // ·  霊 霊
+            [ 2, 2, -1], // 霊 霊 ·
+        ],
+        reward: 2,
+    },
+
+    // ── Z4: Zテトロミノ ── バンシー
+    {
+        id: 'banshee_bone',
+        name: 'スクリーム',
+        rarity: 'common',
+        pattern: [
+            [ 0, 0, -1], // 骨 骨 ·
+            [-1, 0,  0], // ·  骨 骨
+        ],
+        reward: 2,
+    },
+    {
+        id: 'banshee_meat',
+        name: 'ミラー',
+        rarity: 'common',
+        pattern: [
+            [ 1, 1, -1], // 肉 肉 ·
+            [-1, 1,  1], // ·  肉 肉
+        ],
+        reward: 2,
+    },
+    {
+        id: 'banshee_spirit',
+        name: 'ハンター',
+        rarity: 'common',
+        pattern: [
+            [ 2, 2, -1], // 霊 霊 ·
+            [-1, 2,  2], // ·  霊 霊
         ],
         reward: 2,
     },
@@ -298,7 +419,7 @@ export const PIECE_EMOJIS: Record<number, string> = {
 
 // レシピIDごとの絵文字
 export const RECIPE_EMOJIS: Record<string, string> = {
-    // コモン (骨バリアント)
+    // コモン
     skeleton_bone:   '💀',
     skeleton_meat:   '💀',
     skeleton_spirit: '💀',
@@ -317,6 +438,15 @@ export const RECIPE_EMOJIS: Record<string, string> = {
     wisp_bone:       '✨',
     wisp_meat:       '✨',
     wisp_spirit:     '✨',
+    goblin_bone:     '👺',
+    goblin_meat:     '👺',
+    goblin_spirit:   '👺',
+    imp_bone:        '😈',
+    imp_meat:        '😈',
+    imp_spirit:      '😈',
+    banshee_bone:    '👻',
+    banshee_meat:    '👻',
+    banshee_spirit:  '👻',
     // レア
     necromancer: '🧟',
     minotaur:    '🐂',

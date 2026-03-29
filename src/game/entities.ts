@@ -77,11 +77,23 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'lich_meat':   { maxHp: 600, attack: 88,  range: 200, speed: DEMON_SPEED * 0.8,  maxCooldown: 58,  color: 0xffaaaa, materialType: 1, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'HEAL_AURA', value: 6, range: 120 }] },
     'lich_spirit': { maxHp: 260, attack: 105, range: 400, speed: DEMON_SPEED * 0.9,  maxCooldown: 75,  color: 0xaa55ff, materialType: 2, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'AOE_ON_HIT', value: 40, range: 80 }] },
 
-    // --- Goblin Derivations (3マッチトークン・最弱)
-    // DPS目安: bone≈18, meat≈36, spirit≈22
-    'goblin_bone':   { maxHp: 80,  attack: 12, range: 40, speed: DEMON_SPEED * 1.2, maxCooldown: 40, color: 0xaaaaaa, materialType: 0, attackType: 'melee', size: 12, accuracy: 1 },
-    'goblin_meat':   { maxHp: 120, attack: 18, range: 40, speed: DEMON_SPEED * 1.4, maxCooldown: 30, color: 0xff8888, materialType: 1, attackType: 'melee', size: 12, accuracy: 1 },
-    'goblin_spirit': { maxHp: 60,  attack: 9,  range: 80, speed: DEMON_SPEED * 1.5, maxCooldown: 25, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 10, accuracy: 1 },
+    // --- Goblin Derivations (コモン・高速近接・サポート付き)
+    // DPS目安: bone≈18+毒地, meat≈36+攻撃バフ, spirit≈22+オーラ回復
+    'goblin_bone':   { maxHp: 80,  attack: 12, range: 40, speed: DEMON_SPEED * 1.2, maxCooldown: 40, color: 0xaaaaaa, materialType: 0, attackType: 'melee', size: 12, accuracy: 1, passiveAbilities: [{ type: 'AREA_DOT', value: 15, range: 40 }] },
+    'goblin_meat':   { maxHp: 120, attack: 18, range: 40, speed: DEMON_SPEED * 1.4, maxCooldown: 30, color: 0xff8888, materialType: 1, attackType: 'melee', size: 12, accuracy: 1, passiveAbilities: [{ type: 'ATK_BUFF', value: 1.2, range: 80 }] },
+    'goblin_spirit': { maxHp: 60,  attack: 9,  range: 80, speed: DEMON_SPEED * 1.5, maxCooldown: 25, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 10, accuracy: 1, passiveAbilities: [{ type: 'AURA_REGEN', value: 3, range: 80 }] },
+
+    // --- Imp Derivations (コモン・中距離支援)
+    // DPS目安: bone≈40+ピース回収, meat≈ヒール, spirit≈55+死体爆発
+    'imp_bone':   { maxHp: 180, attack: 30, range: 60,  speed: DEMON_SPEED * 1.3, maxCooldown: 45, color: 0xddbb88, materialType: 0, attackType: 'melee',  size: 13, accuracy: 1, passiveAbilities: [{ type: 'PIECE_RETURN', range: 120 }] },
+    'imp_meat':   { maxHp: 250, attack: 40, range: 180, speed: DEMON_SPEED * 1.0, maxCooldown: 60, color: 0xff9977, materialType: 1, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'HEAL_SHOT' }] },
+    'imp_spirit': { maxHp: 150, attack: 55, range: 160, speed: DEMON_SPEED * 1.1, maxCooldown: 50, color: 0xbb77ff, materialType: 2, attackType: 'ranged', size: 12, accuracy: 1, passiveAbilities: [{ type: 'CORPSE_EXPLOSION', value: 80, range: 80 }] },
+
+    // --- Banshee Derivations (コモン・霊体スクリーマー)
+    // DPS目安: bone≈80+範囲, meat≈60+複製, spirit≈100+自爆
+    'banshee_bone':   { maxHp: 200, attack: 90,  range: 300, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xeeeeff, materialType: 0, attackType: 'ranged', size: 13, accuracy: 1, passiveAbilities: [{ type: 'INSTANT_AOE', value: 60, range: 100 }] },
+    'banshee_meat':   { maxHp: 280, attack: 60,  range: 180, speed: DEMON_SPEED * 1.0, maxCooldown: 55, color: 0xffbbbb, materialType: 1, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'CLONE' }] },
+    'banshee_spirit': { maxHp: 160, attack: 100, range: 60,  speed: DEMON_SPEED * 1.4, maxCooldown: 50, color: 0xaa66ff, materialType: 2, attackType: 'melee',  size: 11, accuracy: 1, passiveAbilities: [{ type: 'PROXIMITY_EXPLOSION', value: 150, range: 80 }] },
 
     // --- Orc Derivations (コモン・低速重装AOE)
     // DPS目安: bone≈24×AOE, meat≈28×AOE, spirit≈30×AOE
