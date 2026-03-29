@@ -346,8 +346,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const resetGame = React.useCallback(() => {
         setSummonedMonsters([]);
-        setUnlockedRecipes(['orc', 'skeleton', 'wisp']);
-        setEquippedRecipes(['orc', 'skeleton', 'wisp']);
+        setUnlockedRecipes([]);
+        setEquippedRecipes([]);
         setCurrentDay(1);
         setMoney(0);
         setOwnedRelics([]);

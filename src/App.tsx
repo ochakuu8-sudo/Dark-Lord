@@ -31,7 +31,15 @@ const GameController: React.FC = () => {
 
   const startDebugMode = () => {
     setIsDebugMode(true);
-    ['orc', 'archer', 'necromancer', 'wisp', 'skeleton', 'cerberus', 'lich', 'minotaur', 'ghoul'].forEach(id => {
+    [
+      'skeleton_bone', 'skeleton_meat', 'skeleton_spirit',
+      'orc_bone', 'orc_meat', 'orc_spirit',
+      'archer_bone', 'archer_meat', 'archer_spirit',
+      'cerberus_bone', 'cerberus_meat', 'cerberus_spirit',
+      'lich_bone', 'lich_meat', 'lich_spirit',
+      'wisp_bone', 'wisp_meat', 'wisp_spirit',
+      'necromancer', 'minotaur', 'ghoul',
+    ].forEach(id => {
       unlockRecipe(id);
       addEquippedRecipe(id);
     });

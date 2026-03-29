@@ -27,46 +27,214 @@ export interface Recipe {
 // 形ごとにロール（Melee=縦3, Tank=2x2, Ranged=横3, Magic=十字）を設定し、各色に用意する
 
 export const ALL_RECIPES: Recipe[] = [
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // COMMON: ワイルドなし、形＝ユニット確定
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    // ── スケルトン (骨主体) ──
     {
-        id: 'orc',
-        name: 'オーク',
+        id: 'skeleton_bone',
+        name: 'スケルトン(骨)',
+        rarity: 'common',
+        pattern: [
+            [0,  0], // 骨 骨
+            [0, -1], // 骨 ·
+        ],
+        reward: 1,
+    },
+    {
+        id: 'skeleton_meat',
+        name: 'スケルトン(肉)',
+        rarity: 'common',
+        pattern: [
+            [0, -1], // 骨 ·
+            [0,  1], // 骨 肉
+        ],
+        reward: 1,
+    },
+    {
+        id: 'skeleton_spirit',
+        name: 'スケルトン(霊)',
+        rarity: 'common',
+        pattern: [
+            [0], // 骨
+            [0], // 骨
+            [2], // 霊
+        ],
+        reward: 1,
+    },
+
+    // ── オーク (肉主体) ──
+    {
+        id: 'orc_bone',
+        name: 'オーク(骨)',
+        rarity: 'common',
+        pattern: [
+            [1,  0], // 肉 骨
+            [1, -1], // 肉 ·
+        ],
+        reward: 1,
+    },
+    {
+        id: 'orc_meat',
+        name: 'オーク(肉)',
+        rarity: 'common',
+        pattern: [
+            [1, 1, 1], // 肉 肉 肉
+        ],
+        reward: 1,
+    },
+    {
+        id: 'orc_spirit',
+        name: 'オーク(霊)',
+        rarity: 'common',
+        pattern: [
+            [1, -1], // 肉 ·
+            [1,  2], // 肉 霊
+        ],
+        reward: 1,
+    },
+
+    // ── アーチャー (骨主体・縦) ──
+    {
+        id: 'archer_bone',
+        name: 'アーチャー(骨)',
+        rarity: 'common',
+        pattern: [
+            [0], // 骨
+            [0], // 骨
+            [0], // 骨
+            [0], // 骨
+        ],
+        reward: 2,
+    },
+    {
+        id: 'archer_meat',
+        name: 'アーチャー(肉)',
+        rarity: 'common',
+        pattern: [
+            [0], // 骨
+            [1], // 肉
+            [0], // 骨
+        ],
+        reward: 2,
+    },
+    {
+        id: 'archer_spirit',
+        name: 'アーチャー(霊)',
+        rarity: 'common',
+        pattern: [
+            [0,  0], // 骨 骨
+            [-1, 2], // ·  霊
+        ],
+        reward: 2,
+    },
+
+    // ── ケルベロス (肉主体・横) ──
+    {
+        id: 'cerberus_bone',
+        name: 'ケルベロス(骨)',
+        rarity: 'common',
+        pattern: [
+            [1, 0, 1], // 肉 骨 肉
+        ],
+        reward: 1,
+    },
+    {
+        id: 'cerberus_meat',
+        name: 'ケルベロス(肉)',
         rarity: 'common',
         pattern: [
             [1, 1], // 肉 肉
-            [1, 9]  // 肉 X
+            [1, 1], // 肉 肉
         ],
         reward: 1,
-        resultMap: {
-            0: 'orc_bone',   // 肉肉肉骨
-            1: 'orc_meat',   // 肉肉肉肉
-            2: 'orc_spirit', // 肉肉肉霊
-        }
     },
     {
-        id: 'archer',
-        name: 'アーチャー',
+        id: 'cerberus_spirit',
+        name: 'ケルベロス(霊)',
         rarity: 'common',
         pattern: [
-            [0], // 骨
-            [0], // 骨
-            [0], // 骨
-            [9]  // X
+            [1, 2, 1], // 肉 霊 肉
+        ],
+        reward: 1,
+    },
+
+    // ── リッチ (霊主体) ──
+    {
+        id: 'lich_bone',
+        name: 'リッチ(骨)',
+        rarity: 'common',
+        pattern: [
+            [2,  2, -1], // 霊 霊 ·
+            [0, -1, -1], // 骨 ·  ·
         ],
         reward: 2,
-        resultMap: {
-            0: 'archer_bone',
-            1: 'archer_meat',
-            2: 'archer_spirit',
-        }
     },
+    {
+        id: 'lich_meat',
+        name: 'リッチ(肉)',
+        rarity: 'common',
+        pattern: [
+            [2,  1], // 霊 肉
+            [2, -1], // 霊 ·
+        ],
+        reward: 2,
+    },
+    {
+        id: 'lich_spirit',
+        name: 'リッチ(霊)',
+        rarity: 'common',
+        pattern: [
+            [2, 2, 2], // 霊 霊 霊
+        ],
+        reward: 2,
+    },
+
+    // ── ウィスプ (霊主体・拡散) ──
+    {
+        id: 'wisp_bone',
+        name: 'ウィスプ(骨)',
+        rarity: 'common',
+        pattern: [
+            [2, -1], // 霊 ·
+            [0,  2], // 骨 霊
+        ],
+        reward: 2,
+    },
+    {
+        id: 'wisp_meat',
+        name: 'ウィスプ(肉)',
+        rarity: 'common',
+        pattern: [
+            [-1, 2], // ·  霊
+            [ 1, 2], // 肉 霊
+        ],
+        reward: 2,
+    },
+    {
+        id: 'wisp_spirit',
+        name: 'ウィスプ(霊)',
+        rarity: 'common',
+        pattern: [
+            [2, -1, -1], // 霊 ·  ·
+            [-1, 2, -1], // ·  霊 ·
+            [-1, -1, 2], // ·  ·  霊
+        ],
+        reward: 2,
+    },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // RARE: ワイルドあり (❓でバリアント決定)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
         id: 'necromancer',
         name: 'ネクロマンサー',
         rarity: 'rare',
         pattern: [
-            [ 2, 9,  2], // 霊 X 霊
-            [-1, 0, -1], //   骨
-            [-1, 0, -1], //   骨
+            [ 2, 9,  2], // 霊 ❓ 霊
+            [-1, 0, -1], // ·  骨 ·
+            [-1, 0, -1], // ·  骨 ·
         ],
         reward: 4,
         resultMap: {
@@ -76,72 +244,12 @@ export const ALL_RECIPES: Recipe[] = [
         }
     },
     {
-        id: 'skeleton',
-        name: 'スケルトン',
-        rarity: 'common',
-        pattern: [
-            [0, -1], // 骨 ·
-            [9,  0], // X  骨
-        ],
-        reward: 1,
-        resultMap: {
-            0: 'skeleton_bone',
-            1: 'skeleton_meat',
-            2: 'skeleton_spirit',
-        }
-    },
-    {
-        id: 'cerberus',
-        name: 'ケルベロス',
-        rarity: 'common',
-        pattern: [
-            [1, 9, 1], // 肉 X 肉
-        ],
-        reward: 1,
-        resultMap: {
-            0: 'cerberus_bone',
-            1: 'cerberus_meat',
-            2: 'cerberus_spirit',
-        }
-    },
-    {
-        id: 'lich',
-        name: 'リッチ',
-        rarity: 'common',
-        pattern: [
-            [2, 2,  2], // 霊 霊 霊
-            [9, -1, -1], // X ·  ·
-        ],
-        reward: 2,
-        resultMap: {
-            0: 'lich_bone',
-            1: 'lich_meat',
-            2: 'lich_spirit',
-        }
-    },
-    {
-        id: 'wisp',
-        name: 'ウィスプ',
-        rarity: 'common',
-        pattern: [
-            [ 2, -1, -1], // 霊 .  .
-            [-1,  9, -1], //  . X  .
-            [-1, -1,  2], //  . .  霊
-        ],
-        reward: 2,
-        resultMap: {
-            0: 'wisp_bone',
-            1: 'wisp_meat',
-            2: 'wisp_spirit',
-        }
-    },
-    {
         id: 'minotaur',
         name: 'ミノタウロス',
         rarity: 'rare',
         pattern: [
-            [-1, 1, 0,  0], // · 肉 骨 骨
-            [ 1, 9, -1, -1], // 肉 ❓ · ·
+            [-1, 1, 0,  0], // ·  肉 骨 骨
+            [ 1, 9, -1, -1], // 肉 ❓ ·  ·
         ],
         reward: 3,
         resultMap: {
@@ -155,9 +263,9 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'グール',
         rarity: 'rare',
         pattern: [
-            [-1, 1, -1], // · 肉 ·
+            [-1, 1, -1], // ·  肉 ·
             [ 2, 9,  1], // 霊 ❓ 肉
-            [-1, 2, -1], // · 霊 ·
+            [-1, 2, -1], // ·  霊 ·
         ],
         reward: 3,
         resultMap: {
@@ -190,11 +298,26 @@ export const PIECE_EMOJIS: Record<number, string> = {
 
 // レシピIDごとの絵文字
 export const RECIPE_EMOJIS: Record<string, string> = {
-    goblin:      '👺',
-    orc:         '👹',
-    skeleton:    '💀',
-    archer:      '🏹',
-    lich:        '💀',
+    // コモン (骨バリアント)
+    skeleton_bone:   '💀',
+    skeleton_meat:   '💀',
+    skeleton_spirit: '💀',
+    orc_bone:        '👹',
+    orc_meat:        '👹',
+    orc_spirit:      '👹',
+    archer_bone:     '🏹',
+    archer_meat:     '🏹',
+    archer_spirit:   '🏹',
+    cerberus_bone:   '🐕',
+    cerberus_meat:   '🐕',
+    cerberus_spirit: '🐕',
+    lich_bone:       '🧙',
+    lich_meat:       '🧙',
+    lich_spirit:     '🧙',
+    wisp_bone:       '✨',
+    wisp_meat:       '✨',
+    wisp_spirit:     '✨',
+    // レア
     necromancer: '🧟',
     minotaur:    '🐂',
     ghoul:       '👾',
