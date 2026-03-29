@@ -31,8 +31,8 @@ export const ALL_RECIPES: Recipe[] = [
     // COMMON: 単色形のみ  9形状 × 3素材 = 27種
     //
     //  形一覧:
-    //   I3  縦3直線     → スケルトン
-    //   L3  L字(3)      → オーク
+    //   I3  縦3直線     → オーク
+    //   L3  L字(3)      → スケルトン
     //   I4  縦4直線     → アーチャー
     //   O4  2×2正方形   → ケルベロス
     //   T4  T字         → リッチ
@@ -42,10 +42,10 @@ export const ALL_RECIPES: Recipe[] = [
     //   Z4  Zテトロミノ → バンシー
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    // ── I3: 縦3直線 ── スケルトン
+    // ── I3: 縦3直線 ── オーク
     {
-        id: 'skeleton_bone',
-        name: 'ドッペル',
+        id: 'orc_bone',
+        name: 'バリケード',
         rarity: 'common',
         pattern: [
             [0], // 骨
@@ -55,8 +55,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 1,
     },
     {
-        id: 'skeleton_meat',
-        name: 'マルティル',
+        id: 'orc_meat',
+        name: 'バーサーカー',
         rarity: 'common',
         pattern: [
             [1], // 肉
@@ -66,8 +66,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 1,
     },
     {
-        id: 'skeleton_spirit',
-        name: 'ファントム',
+        id: 'orc_spirit',
+        name: 'シャーマン',
         rarity: 'common',
         pattern: [
             [2], // 霊
@@ -77,10 +77,10 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 1,
     },
 
-    // ── L3: L字(3) ── オーク
+    // ── L3: L字(3) ── スケルトン
     {
-        id: 'orc_bone',
-        name: 'バリケード',
+        id: 'skeleton_bone',
+        name: 'ドッペル',
         rarity: 'common',
         pattern: [
             [0,  0], // 骨 骨
@@ -89,8 +89,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 1,
     },
     {
-        id: 'orc_meat',
-        name: 'バーサーカー',
+        id: 'skeleton_meat',
+        name: 'マルティル',
         rarity: 'common',
         pattern: [
             [1,  1], // 肉 肉
@@ -99,8 +99,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 1,
     },
     {
-        id: 'orc_spirit',
-        name: 'シャーマン',
+        id: 'skeleton_spirit',
+        name: 'ファントム',
         rarity: 'common',
         pattern: [
             [2,  2], // 霊 霊
