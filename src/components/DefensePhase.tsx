@@ -97,7 +97,7 @@ interface DefensePhaseProps {
 const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChange }) => {
     const {
         summonedMonsters,
-        currentDay, incrementDay, setPhase, phase,
+        incrementDay, setPhase, phase,
         incomingEnemies, ownedRelics, addPendingPuzzlePiece,
         expectedSummons, fieldWidth, registerPixiApp, ritualGrid,
         isDebugMode, updateIncomingEnemy,
@@ -155,10 +155,9 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         const s = stateRef.current;
         s.entities = s.entities.filter(e => e.faction !== 'HERO');
         s.wave = 0; s.waveInProgress = false; s.phaseEnded = false;
-        const dayHpMult = 1.0 + (currentDay - 1) * 0.4;
         incomingEnemies.forEach(en => {
             const stats = UNIT_STATS[en.type] || UNIT_STATS['村人'];
-            const finalHp = Math.floor(stats.maxHp! * (en.isElite ? 2 : 1) * (en.hpScale ?? 1) * dayHpMult);
+            const finalHp = Math.floor(stats.maxHp! * (en.isElite ? 2 : 1));
             s.entities.push({
                 id: en.id, type: en.type, faction: 'HERO',
                 x: BOARD_WIDTH + en.col * BLOCK_SIZE + BLOCK_SIZE / 2, y: en.row * BLOCK_SIZE + BLOCK_SIZE / 2,
@@ -169,7 +168,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 color: en.isElite ? 0xffd700 : stats.color!,
             });
         });
-    }, [phase, incomingEnemies, currentDay]);
+    }, [phase, incomingEnemies]);
 
     const [uiState, setUiState] = useState({
         wave: 0,
@@ -436,13 +435,12 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         // 既存HEROを削除してRITUALプレスポーン分と重複しないよう再配置
         s.entities = s.entities.filter(e => e.faction !== 'HERO');
-        const dayHpMult = 1.0 + (currentDay - 1) * 0.4;
 
         s.currentIncomingEnemies.forEach(en => {
             const stats = UNIT_STATS[en.type] || UNIT_STATS['村人'];
             const isElite = en.isElite;
             if (isElite) s.eliteIds.add(en.id);
-            const finalHp = Math.floor(stats.maxHp! * (isElite ? 2 : 1) * dayHpMult);
+            const finalHp = Math.floor(stats.maxHp! * (isElite ? 2 : 1));
             s.entities.push({
                 id: en.id, type: en.type, faction: 'HERO',
                 x: BOARD_WIDTH + en.col * BLOCK_SIZE + BLOCK_SIZE / 2,
@@ -455,7 +453,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             });
         });
 
-    }, [currentDay]);
+    }, []);
 
     // ── Spawn a projectile ────────────────
     const spawnProjectile = (attacker: EntityState, target: EntityState | 'base' | 'hero_base' | 'forward') => {
