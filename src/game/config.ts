@@ -31,21 +31,21 @@ export const ALL_RECIPES: Recipe[] = [
     // COMMON: 単色形のみ  9形状 × 3素材 = 27種
     //
     //  形一覧:
-    //   I3  縦3直線     → オーク
+    //   I3  縦3直線     → ウィスプ
     //   L3  L字(3)      → スケルトン
     //   I4  縦4直線     → アーチャー
-    //   O4  2×2正方形   → ケルベロス
+    //   O4  2×2正方形   → オーク
     //   T4  T字         → リッチ
-    //   L4  Lテトロミノ → ウィスプ
+    //   L4  Lテトロミノ → ケルベロス
     //   J4  Jテトロミノ → ゴブリン
     //   S4  Sテトロミノ → インプ
     //   Z4  Zテトロミノ → バンシー
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    // ── I3: 縦3直線 ── オーク
+    // ── I3: 縦3直線 ── ウィスプ
     {
-        id: 'orc_bone',
-        name: 'バリケード',
+        id: 'wisp_bone',
+        name: 'スパーク',
         rarity: 'common',
         pattern: [
             [0], // 骨
@@ -55,8 +55,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 1,
     },
     {
-        id: 'orc_meat',
-        name: 'バーサーカー',
+        id: 'wisp_meat',
+        name: 'メデック',
         rarity: 'common',
         pattern: [
             [1], // 肉
@@ -66,8 +66,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 1,
     },
     {
-        id: 'orc_spirit',
-        name: 'シャーマン',
+        id: 'wisp_spirit',
+        name: 'カミカゼ',
         rarity: 'common',
         pattern: [
             [2], // 霊
@@ -147,10 +147,10 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 2,
     },
 
-    // ── O4: 2×2正方形 ── ケルベロス
+    // ── O4: 2×2正方形 ── オーク
     {
-        id: 'cerberus_bone',
-        name: 'ヘルハウンド',
+        id: 'orc_bone',
+        name: 'バリケード',
         rarity: 'common',
         pattern: [
             [0, 0], // 骨 骨
@@ -159,8 +159,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 2,
     },
     {
-        id: 'cerberus_meat',
-        name: 'ブラッドハウンド',
+        id: 'orc_meat',
+        name: 'バーサーカー',
         rarity: 'common',
         pattern: [
             [1, 1], // 肉 肉
@@ -169,8 +169,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 2,
     },
     {
-        id: 'cerberus_spirit',
-        name: 'ヴェノムハウンド',
+        id: 'orc_spirit',
+        name: 'シャーマン',
         rarity: 'common',
         pattern: [
             [2, 2], // 霊 霊
@@ -211,10 +211,10 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 2,
     },
 
-    // ── L4: Lテトロミノ ── ウィスプ
+    // ── L4: Lテトロミノ ── ケルベロス
     {
-        id: 'wisp_bone',
-        name: 'スパーク',
+        id: 'cerberus_bone',
+        name: 'ヘルハウンド',
         rarity: 'common',
         pattern: [
             [0, -1], // 骨 ·
@@ -224,8 +224,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 2,
     },
     {
-        id: 'wisp_meat',
-        name: 'メデック',
+        id: 'cerberus_meat',
+        name: 'ブラッドハウンド',
         rarity: 'common',
         pattern: [
             [1, -1], // 肉 ·
@@ -235,8 +235,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 2,
     },
     {
-        id: 'wisp_spirit',
-        name: 'カミカゼ',
+        id: 'cerberus_spirit',
+        name: 'ヴェノムハウンド',
         rarity: 'common',
         pattern: [
             [2, -1], // 霊 ·
