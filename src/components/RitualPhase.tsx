@@ -184,6 +184,20 @@ const RitualPhase: React.FC = () => {
         return () => window.removeEventListener('pointerdown', handler);
     }, [pinnedPiece]);
 
+    const [pinnedRecipe, setPinnedRecipe] = useState<{ recipe: Recipe; pos: { x: number; y: number } } | null>(null);
+    const pinnedRecipeInfoRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!pinnedRecipe) return;
+        const handler = (e: PointerEvent) => {
+            if (pinnedRecipeInfoRef.current && !pinnedRecipeInfoRef.current.contains(e.target as Node)) {
+                setPinnedRecipe(null);
+            }
+        };
+        window.addEventListener('pointerdown', handler);
+        return () => window.removeEventListener('pointerdown', handler);
+    }, [pinnedRecipe]);
+
     const audioCtxRef = useRef<AudioContext | null>(null);
 
     const playComboSound = useCallback((comboN: number) => {
@@ -1032,11 +1046,19 @@ const RitualPhase: React.FC = () => {
         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', padding: '0 14px', gap: '12px', boxSizing: 'border-box' }}>
             <div style={{ color: '#554466', fontSize: '10px', letterSpacing: '1px', flexShrink: 0 }}>📜</div>
             {activeRecipes.map(recipe => (
-                <div key={recipe.id} style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', flexShrink: 0
-                }}>
+                <div key={recipe.id}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', flexShrink: 0, cursor: 'pointer' }}
+                    onClick={e => {
+                        const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                        setPinnedRecipe(prev => prev?.recipe.id === recipe.id ? null : {
+                            recipe,
+                            pos: { x: rect.left + rect.width / 2, y: rect.top },
+                        });
+                    }}
+                >
                     <div style={{
-                        background: '#100c1c', border: '1px solid #2a1a3a',
+                        background: pinnedRecipe?.recipe.id === recipe.id ? '#1a0a2e' : '#100c1c',
+                        border: `1px solid ${pinnedRecipe?.recipe.id === recipe.id ? '#8844ff' : '#2a1a3a'}`,
                         borderRadius: '6px',
                         width: '64px', height: '64px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1305,6 +1327,77 @@ const RitualPhase: React.FC = () => {
                     </div>
                 );
             })()}
+
+            {/* ───── レシピ情報ポップアップ ───── */}
+            {pinnedRecipe && ReactDOM.createPortal((() => {
+                const recipe = pinnedRecipe.recipe;
+                const isRare = !!recipe.resultMap;
+                // コモン: recipe.id = ユニットID、レア: resultMapから3バリアント
+                const variants: { unitId: string; label: string }[] = isRare
+                    ? Object.entries(recipe.resultMap!).map(([k, unitId]) => ({
+                        unitId,
+                        label: ['骨', '肉', '霊'][Number(k)] ?? k,
+                    }))
+                    : [{ unitId: recipe.id, label: '' }];
+
+                const popW = isRare ? 220 : 180;
+                const left = Math.max(8, Math.min(pinnedRecipe.pos.x - popW / 2, window.innerWidth - popW - 8));
+                const top = Math.max(8, pinnedRecipe.pos.y - 8);
+
+                return (
+                    <div ref={pinnedRecipeInfoRef} style={{
+                        position: 'fixed',
+                        top, left,
+                        transform: 'translateY(-100%)',
+                        backgroundColor: 'rgba(0,0,0,0.94)',
+                        color: '#fff',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #8844ff',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.7)',
+                        width: `${popW}px`,
+                        zIndex: 99999,
+                        pointerEvents: 'auto',
+                    }} onPointerDown={e => e.stopPropagation()}>
+                        {/* レシピ名 + レアリティ */}
+                        <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#ccaaff', marginBottom: '2px' }}>
+                            {RECIPE_EMOJIS[recipe.id] ?? '📜'} {recipe.name}
+                        </div>
+                        <div style={{ fontSize: '9px', color: RARITY_COLOR[recipe.rarity], marginBottom: '8px', letterSpacing: '1px' }}>
+                            {RARITY_LABEL[recipe.rarity]}
+                        </div>
+
+                        {variants.map(({ unitId, label }) => {
+                            const stats = UNIT_STATS[unitId];
+                            if (!stats) return null;
+                            const abilities = stats.passiveAbilities ?? [];
+                            const matColor = stats.materialType === 0 ? '#dddddd' : stats.materialType === 1 ? '#ff8888' : '#aa66ff';
+                            return (
+                                <div key={unitId} style={{ marginBottom: label ? '8px' : 0 }}>
+                                    {label && (
+                                        <div style={{ fontSize: '10px', color: matColor, fontWeight: 'bold', marginBottom: '3px' }}>
+                                            [{label}]
+                                        </div>
+                                    )}
+                                    <div style={{ fontSize: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 10px' }}>
+                                        <span style={{ color: '#aaffaa' }}>HP: {stats.maxHp}</span>
+                                        <span style={{ color: '#ffaaaa' }}>ATK: {stats.attack}</span>
+                                        <span style={{ color: '#aaaaff' }}>射程: {stats.range}</span>
+                                        <span style={{ color: '#ffff88' }}>速度: {(stats.speed ?? 0).toFixed(1)}</span>
+                                    </div>
+                                    {abilities.length > 0 && (
+                                        <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px solid #2a1a3a', fontSize: '10px', color: '#cc88ff' }}>
+                                            {abilities.map((pa, i) => (
+                                                <div key={i}>★ {PASSIVE_DESCRIPTIONS[pa.type] ?? pa.type}</div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })(), document.body)}
 
             {/* ───── デバッグ: 敵軍パターン選択 ───── */}
             {import.meta.env.DEV && ReactDOM.createPortal(
