@@ -766,10 +766,10 @@ const RitualPhase: React.FC = () => {
         const { summons, matchGroups } = result;
         if (summons.length === 0) { onComplete?.([]); return; }
 
-        // 1召喚ごとにコンボ演出（500msから10msずつ加速、下限20ms）
+        // 1召喚ごとにコンボ演出（450msから10msずつ加速、下限30ms）
         let cumulativeMs = 0;
         matchGroups.forEach((cells, i) => {
-            const stepMs = Math.max(20, 500 - i * 10);
+            const stepMs = Math.max(30, 450 - i * 10);
             const delay = cumulativeMs;
             setTimeout(() => {
                 setFlashCells(cells);
