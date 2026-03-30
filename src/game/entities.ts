@@ -32,6 +32,8 @@ export interface EntityState {
     size?: number;         // pixel radius for rendering and hitbox
     accuracy?: number;     // 0-1: hit rate
     passiveAbilities?: PassiveAbility[];
+    passiveCache?: Partial<Record<PassiveAbility['type'], PassiveAbility>>; // 毎フレームfind()を避けるキャッシュ
+    isBoss?: boolean;    // ボス敵フラグ（撃破でレシピ獲得）
     // Temporary runtime fields
     poisonedFrames?: number;
     stealthActive?: boolean;
