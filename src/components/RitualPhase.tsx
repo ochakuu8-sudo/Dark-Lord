@@ -6,7 +6,7 @@ import { useGame } from '../contexts/GameContext';
 import {
     COLORS, PIECE_EMOJIS, ALL_RECIPES,
     ROWS, COLS, BLOCK_SIZE, RECIPE_EMOJIS, MATERIAL_BG_COLORS, COLOR_HEX,
-    RELICS, RARITY_COLOR, RARITY_LABEL, type Recipe, type Relic
+    RARITY_COLOR, RARITY_LABEL, type Recipe
 } from '../game/config';
 import { UNIT_STATS, PASSIVE_DESCRIPTIONS } from '../game/entities';
 import type { SummonedUnit } from '../contexts/GameContext';
@@ -42,102 +42,22 @@ const RitualPhase: React.FC = () => {
         setExpectedSummons,
         expectedSummons,
         pixiAppRef, pixiAppVersion,
-        generateWave, currentPattern, setPattern,
-        equippedRecipes, addEquippedRecipe,
-        ownedRelics, addRelic,
+        generateBattleOptions, selectBattleOption,
+        battleOptions, selectedBattleOption,
         money,
         isDebugMode,
         pendingPuzzlePieces, consumePendingPuzzlePieces,
         debugGridClearSignal,
     } = useGame();
 
-    // ── ドラフト型定義 ──
-    type DraftDifficulty = 'easy' | 'normal' | 'hard';
-    interface DraftOption {
-        patternId: string;
-        patternName: string;
-        patternDesc: string;
-        difficulty: DraftDifficulty;
-        reward: { type: 'recipe'; recipe: Recipe } | { type: 'relic'; relic: Relic };
-    }
+    const DIFF_STARS: Record<1 | 2 | 3, string> = { 1: '★☆☆', 2: '★★☆', 3: '★★★' };
+    const DIFF_COLOR: Record<1 | 2 | 3, string> = { 1: '#44cc66', 2: '#ffaa00', 3: '#ff4444' };
+    const MATERIAL_NAMES_UI: Record<number, string> = { 0: '骨', 1: '肉', 2: '霊' };
 
-    const PATTERN_META: Record<string, { name: string; desc: string; difficulty: DraftDifficulty }> = {
-        swarm:       { name: '雪崩',       desc: '農夫・村人が大挙して押し寄せる',       difficulty: 'easy' },
-        speed_rush:  { name: '奇襲隊',     desc: '農夫・剣士が高速突撃',                 difficulty: 'easy' },
-        archer_wall: { name: '弓兵殲滅陣', desc: '後方から遠距離攻撃の猛攻',             difficulty: 'normal' },
-        turtle:      { name: '亀甲陣',     desc: '重騎士+プリーストの硬い布陣',          difficulty: 'normal' },
-        lane_rush:   { name: '縦割り突撃', desc: '中央レーンに兵力を集中投入',           difficulty: 'normal' },
-        phased:      { name: '波状攻撃',   desc: 'タンク→中衛→遠距離の3層攻勢',         difficulty: 'normal' },
-        priest_loop: { name: '支援完結型', desc: 'プリーストによる永続回復編成',          difficulty: 'hard' },
-        vip_guard:   { name: '精鋭護衛隊', desc: '聖騎士に守られた勇者が直接攻撃',       difficulty: 'hard' },
-    };
-    const RECIPE_TIER: Record<string, 1 | 2 | 3> = {
-        orc: 1, wisp: 1, skeleton: 1, cerberus: 1, lich: 1, archer: 2, necromancer: 3,
-    };
-    const DIFF_COLOR: Record<DraftDifficulty, string> = {
-        easy: '#44aa44', normal: '#ffaa00', hard: '#ff4444',
-    };
-    const DIFF_LABEL: Record<DraftDifficulty, string> = {
-        easy: '易', normal: '中', hard: '難',
-    };
-
-    // ドラフト状態
-    const [draftOptions, setDraftOptions] = useState<DraftOption[]>([]);
-    const [draftPicked, setDraftPicked] = useState(false);
-    const [pickedRecipeId, setPickedRecipeId] = useState<string | null>(null);
-    const [showRecipeSelect, setShowRecipeSelect] = useState(false);
-
-    // Day開始時: ドラフトオーバーレイ表示（Day2以降のみ）
+    // パズルフェーズ開始時: バトル選択肢を生成
     useEffect(() => {
-        if (isDebugMode) {
-            setPickedRecipeId('debug');
-            setShowRecipeSelect(false);
-            return;
-        }
-        setPickedRecipeId(null);
-        setDraftPicked(false);
-        if (currentDay === 1) {
-            generateWave(currentDay);
-            setShowRecipeSelect(false);
-        } else {
-            // ドラフト選択肢を生成
-            const pick = (diff: DraftDifficulty): [string, typeof PATTERN_META[string]] => {
-                const candidates = Object.entries(PATTERN_META).filter(([, m]) => m.difficulty === diff);
-                const filtered = diff === 'hard' && currentDay < 4
-                    ? candidates.filter(([id]) => id !== 'vip_guard')
-                    : candidates;
-                const arr = filtered.length > 0 ? filtered : candidates;
-                return arr[Math.floor(Math.random() * arr.length)];
-            };
-            const rewardForDiff = (diff: DraftDifficulty): DraftOption['reward'] => {
-                const unequipped = ALL_RECIPES.filter(r => !equippedRecipes.includes(r.id));
-                if (diff === 'easy') {
-                    const pool = unequipped.filter(r => RECIPE_TIER[r.id] === 1);
-                    const p = pool.length > 0 ? pool : unequipped;
-                    if (p.length > 0) return { type: 'recipe', recipe: p[Math.floor(Math.random() * p.length)] };
-                }
-                if (diff === 'normal') {
-                    const pool = unequipped.filter(r => RECIPE_TIER[r.id] === 2);
-                    const p = pool.length > 0 ? pool : unequipped;
-                    if (p.length > 0) return { type: 'recipe', recipe: p[Math.floor(Math.random() * p.length)] };
-                }
-                if (diff === 'hard') {
-                    const pool = unequipped.filter(r => RECIPE_TIER[r.id] === 3);
-                    if (pool.length > 0) return { type: 'recipe', recipe: pool[Math.floor(Math.random() * pool.length)] };
-                }
-                const unownedRelics = RELICS.filter(r => !ownedRelics.includes(r.id));
-                if (unownedRelics.length > 0) return { type: 'relic', relic: unownedRelics[Math.floor(Math.random() * unownedRelics.length)] };
-                const fallback = unequipped;
-                return { type: 'recipe', recipe: fallback[Math.floor(Math.random() * fallback.length)] ?? ALL_RECIPES[0] };
-            };
-            const options: DraftOption[] = (['easy', 'normal', 'hard'] as DraftDifficulty[]).map(diff => {
-                const [patternId, meta] = pick(diff);
-                return { patternId, patternName: meta.name, patternDesc: meta.desc, difficulty: diff, reward: rewardForDiff(diff) };
-            });
-            setDraftOptions(options);
-            setShowRecipeSelect(true);
-        }
-    }, [currentDay]);
+        generateBattleOptions(currentDay);
+    }, [currentDay]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const curRows = ROWS;
     const curCols = COLS;
@@ -854,15 +774,14 @@ const RitualPhase: React.FC = () => {
         dropNewPieces(6); // Day1=6ツモ(12p)
     }, [currentDay, activeRecipes, dropNewPieces]);
 
-    // Day2以降: レシピ選択後にドロップ
+    // Day2以降: バトル選択後にドロップ
     useEffect(() => {
         if (currentDay === 1) return;
-        if (pickedRecipeId === null) return;
+        if (!selectedBattleOption) return;
         if (piecesDroppedThisDay.current) return;
-        if (!activeRecipes.find(r => r.id === pickedRecipeId)) return;
         piecesDroppedThisDay.current = true;
-        dropNewPieces(2); // Day2+=2ツモ(4p)
-    }, [pickedRecipeId, activeRecipes, currentDay, dropNewPieces]);
+        dropNewPieces(2);
+    }, [selectedBattleOption, currentDay, dropNewPieces]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // デバッグモード: pendingPuzzlePieces を消費して盤面に配置
     useEffect(() => {
@@ -1027,7 +946,7 @@ const RitualPhase: React.FC = () => {
             </button>
             {/* 戦闘へ */}
             <button
-                disabled={showRecipeSelect}
+                disabled={!selectedBattleOption}
                 onClick={() => {
                     handleSummon((summons) => {
                         if (summons.length > 0) addSummonedMonsters(summons);
@@ -1035,7 +954,7 @@ const RitualPhase: React.FC = () => {
                         setPhase('BATTLE');
                     });
                 }}
-                style={{ flexShrink: 0, padding: '10px', background: 'linear-gradient(135deg, #4a0a0a, #7a1a1a)', color: '#ffaaaa', border: '1px solid #882222', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: showRecipeSelect ? 'not-allowed' : 'pointer', opacity: showRecipeSelect ? 0.5 : 1 }}>
+                style={{ flexShrink: 0, padding: '10px', background: 'linear-gradient(135deg, #4a0a0a, #7a1a1a)', color: '#ffaaaa', border: '1px solid #882222', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: !selectedBattleOption ? 'not-allowed' : 'pointer', opacity: !selectedBattleOption ? 0.5 : 1 }}>
                 ⚔️ 戦闘へ
             </button>
         </div>
@@ -1074,167 +993,115 @@ const RitualPhase: React.FC = () => {
     );
 
     // ───── ドラフト選択オーバーレイ ─────
-    const MATERIAL_NAMES: Record<number, string> = { 0: '骨', 1: '肉', 2: '霊' };
 
-    const handlePickDraft = (option: DraftOption) => {
-        if (option.reward.type === 'recipe') {
-            addEquippedRecipe(option.reward.recipe.id);
-            setPickedRecipeId(option.reward.recipe.id);
-        } else {
-            addRelic(option.reward.relic.id);
-            setPickedRecipeId('relic-picked');
-        }
-        generateWave(currentDay, option.patternId);
-        setDraftPicked(true);
-    };
 
-    const recipeSelectOverlay = showRecipeSelect && (
+    // ── バトル選択オーバーレイ ──────────────────────────────────────
+    const battleSelectOverlay = !selectedBattleOption && battleOptions.length > 0 && (
         <div style={{
             position: 'fixed', inset: 0, zIndex: 9999,
             background: 'rgba(4, 2, 12, 0.97)',
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'flex-start',
-            overflowY: 'auto',
-            padding: '8px 10px',
-            gap: '6px',
+            overflowY: 'auto', padding: '12px 10px', gap: '8px',
             boxSizing: 'border-box',
         }}>
             {/* ヘッダー */}
             <div style={{ textAlign: 'center', flexShrink: 0 }}>
                 <div style={{ fontSize: '9px', color: '#554466', letterSpacing: '3px' }}>DAY {currentDay}</div>
-                <div style={{ fontSize: '15px', color: '#ccaaff', fontWeight: 'bold', letterSpacing: '2px' }}>ミッション選択</div>
+                <div style={{ fontSize: '15px', color: '#ccaaff', fontWeight: 'bold', letterSpacing: '2px' }}>⚔️ 出撃先を選択</div>
+                <div style={{ fontSize: '10px', color: '#554466', marginTop: '2px' }}>雑魚撃破でピース素材、ボス撃破でレシピを獲得</div>
             </div>
 
-            {/* 3枚のドラフトカード */}
+            {/* 3択カード */}
             <div style={{ display: 'flex', gap: '8px', width: '100%', maxWidth: '900px', flexShrink: 0 }}>
-                {draftOptions.map((opt, idx) => {
+                {battleOptions.map((opt) => {
                     const col = DIFF_COLOR[opt.difficulty];
-                    const isPicked = draftPicked && (
-                        opt.reward.type === 'recipe'
-                            ? pickedRecipeId === opt.reward.recipe.id
-                            : pickedRecipeId === 'relic-picked'
-                    );
-                    const isDisabled = draftPicked && !isPicked;
+                    const recipe = ALL_RECIPES.find(r => r.id === opt.recipeId);
+                    const bossStats = UNIT_STATS[opt.bossType];
                     return (
-                        <div
-                            key={idx}
-                            onClick={() => { if (!draftPicked) handlePickDraft(opt); }}
+                        <div key={opt.id}
+                            onClick={() => selectBattleOption(opt)}
                             style={{
-                                flex: 1,
-                                background: isPicked ? `${col}18` : isDisabled ? '#080612' : '#0e0820',
-                                border: `2px solid ${isPicked ? col : isDisabled ? '#221133' : col + '88'}`,
-                                borderRadius: '10px',
-                                padding: '8px',
-                                display: 'flex', flexDirection: 'column', gap: '5px',
-                                cursor: isDisabled ? 'default' : 'pointer',
-                                opacity: isDisabled ? 0.35 : 1,
-                                transition: 'border-color 0.12s, opacity 0.12s',
+                                flex: 1, background: '#0e0820',
+                                border: `2px solid ${col}88`,
+                                borderRadius: '10px', padding: '10px',
+                                display: 'flex', flexDirection: 'column', gap: '6px',
+                                cursor: 'pointer', transition: 'border-color 0.12s',
                             }}
+                            onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = col}
+                            onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = col + '88'}
                         >
-                            {/* 難易度バッジ + 敵パターン名 */}
+                            {/* 難易度 + タイトル */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <div style={{
-                                    background: col + '33', border: `1px solid ${col}`,
-                                    borderRadius: '3px', padding: '1px 6px',
-                                    fontSize: '10px', fontWeight: 'bold', color: col,
-                                    flexShrink: 0,
-                                }}>
-                                    {DIFF_LABEL[opt.difficulty]}
-                                </div>
-                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#ddbbff' }}>
-                                    {isPicked && '✓ '}{opt.patternName}
-                                </div>
-                            </div>
-                            <div style={{ fontSize: '9px', color: '#886699', lineHeight: 1.4 }}>
-                                {opt.patternDesc}
+                                <span style={{ color: col, fontSize: '12px', letterSpacing: '1px', flexShrink: 0 }}>
+                                    {DIFF_STARS[opt.difficulty]}
+                                </span>
+                                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ddbbff' }}>{opt.label}</span>
                             </div>
 
-                            {/* 区切り */}
-                            <div style={{ borderTop: '1px solid #2a1040' }} />
+                            {/* 雑魚構成 */}
+                            <div style={{ borderTop: '1px solid #2a1040', paddingTop: '5px' }}>
+                                <div style={{ fontSize: '9px', color: '#7755aa', marginBottom: '3px' }}>雑魚</div>
+                                {opt.gruntGroups.map((g, i) => (
+                                    <div key={i} style={{ fontSize: '10px', color: '#ccaacc' }}>
+                                        {g.type} ×{g.count}
+                                    </div>
+                                ))}
+                            </div>
 
-                            {/* 報酬：左に情報、右にパターン/アイコン */}
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                {opt.reward.type === 'recipe' ? (() => {
-                                    const recipe = opt.reward.recipe;
-                                    const stats = UNIT_STATS[recipe.id];
-                                    const materials = recipe.pattern.flat().filter(v => v >= 0 && v !== 9);
-                                    const matCounts: Record<number, number> = {};
-                                    materials.forEach(v => { matCounts[v] = (matCounts[v] ?? 0) + 1; });
-                                    return (
-                                        <>
-                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
-                                                <div style={{ fontSize: '9px', color: '#886699' }}>報酬レシピ</div>
-                                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#ffddaa' }}>{recipe.name}</div>
-                                                <div style={{ fontSize: '9px', color: RARITY_COLOR[recipe.rarity], fontWeight: 'bold' }}>
-                                                    📜 {RARITY_LABEL[recipe.rarity]}
-                                                </div>
-                                                {stats && (
-                                                    <div style={{ fontSize: '8px', color: '#8899aa', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                                        <span>❤️{stats.hp}</span><span>⚔️{stats.attack}</span><span>🏹{stats.range}</span>
-                                                    </div>
-                                                )}
-                                                <div style={{ fontSize: '8px', color: '#776688', display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
-                                                    {Object.entries(matCounts).map(([k, cnt]) => (
-                                                        <span key={k}>{PIECE_EMOJIS[Number(k)]}{MATERIAL_NAMES[Number(k)]}×{cnt}</span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                            <div style={{ display: 'grid', gap: '2px', gridTemplateColumns: `repeat(${recipe.pattern[0].length}, 16px)`, flexShrink: 0 }}>
-                                                {recipe.pattern.map((rowArr, ri) => rowArr.map((val, ci) => (
-                                                    <div key={`${ri}-${ci}`} style={{
-                                                        width: 16, height: 16, borderRadius: 2,
-                                                        backgroundColor: val === -1 ? 'transparent' : val === 9 ? '#333' : COLOR_HEX[val] ?? '#333',
-                                                        border: val !== -1 ? '1px solid #444' : 'none',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px',
-                                                    }}>{val === 9 ? '✕' : val >= 0 ? PIECE_EMOJIS[val] : ''}</div>
-                                                )))}
-                                            </div>
-                                        </>
-                                    );
-                                })() : (() => {
-                                    const relic = opt.reward.relic;
-                                    return (
-                                        <>
-                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
-                                                <div style={{ fontSize: '9px', color: '#886699' }}>報酬レリック</div>
-                                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#ccaaff' }}>{relic.name}</div>
-                                                <div style={{ fontSize: '9px', color: RARITY_COLOR[relic.rarity], fontWeight: 'bold' }}>
-                                                    ✨ {RARITY_LABEL[relic.rarity]}
-                                                </div>
-                                                <div style={{ fontSize: '8px', color: '#664466', lineHeight: 1.4 }}>{relic.description}</div>
-                                            </div>
-                                            <div style={{ fontSize: '32px', lineHeight: 1, flexShrink: 0 }}>{relic.icon}</div>
-                                        </>
-                                    );
-                                })()}
+                            {/* ボス */}
+                            <div style={{ borderTop: '1px solid #2a1040', paddingTop: '5px' }}>
+                                <div style={{ fontSize: '9px', color: '#ff6622', marginBottom: '3px' }}>👑 ボス</div>
+                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#ff9944' }}>{opt.bossType}</div>
+                                {bossStats && (
+                                    <div style={{ fontSize: '8px', color: '#886644', display: 'flex', gap: '5px', marginTop: '2px' }}>
+                                        <span>❤️{(bossStats.maxHp! * 6).toLocaleString()}</span>
+                                        <span>⚔️{(bossStats.attack! * 3).toLocaleString()}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 報酬 */}
+                            <div style={{ borderTop: '1px solid #2a1040', paddingTop: '5px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ fontSize: '9px', color: '#7755aa' }}>報酬</div>
+                                {/* ピース素材 */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <span style={{ fontSize: '14px' }}>{PIECE_EMOJIS[opt.pieceType]}</span>
+                                    <span style={{ fontSize: '10px', color: COLOR_HEX[opt.pieceType] }}>
+                                        {MATERIAL_NAMES_UI[opt.pieceType]}ピース（雑魚1体につき1個）
+                                    </span>
+                                </div>
+                                {/* レシピ */}
+                                {recipe && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ fontSize: '12px' }}>📜</span>
+                                        <div>
+                                            <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#ffddaa' }}>{recipe.name}</div>
+                                            <div style={{ fontSize: '8px', color: RARITY_COLOR[recipe.rarity] }}>{RARITY_LABEL[recipe.rarity]}</div>
+                                        </div>
+                                        {/* レシピパターン */}
+                                        <div style={{ marginLeft: 'auto', display: 'grid', gap: '1px', gridTemplateColumns: `repeat(${recipe.pattern[0]?.length ?? 3}, 12px)`, flexShrink: 0 }}>
+                                            {recipe.pattern.map((row, ri) => row.map((val, ci) => (
+                                                <div key={`${ri}-${ci}`} style={{
+                                                    width: 12, height: 12, borderRadius: 2,
+                                                    background: val === -1 ? 'transparent' : val === 9 ? '#333' : COLOR_HEX[val] ?? '#333',
+                                                    border: val !== -1 ? '1px solid #444' : 'none',
+                                                }} />
+                                            )))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     );
                 })}
             </div>
-
-            {/* 進むボタン */}
-            <button
-                onClick={() => { if (draftPicked) setShowRecipeSelect(false); }}
-                disabled={!draftPicked}
-                style={{
-                    flexShrink: 0,
-                    padding: '8px 36px',
-                    background: draftPicked ? 'linear-gradient(135deg, #2a0808, #5a1212)' : '#100c18',
-                    color: draftPicked ? '#ffaaaa' : '#442233',
-                    border: `1px solid ${draftPicked ? '#662222' : '#220011'}`,
-                    borderRadius: '8px', fontSize: '12px', fontWeight: 'bold',
-                    cursor: draftPicked ? 'pointer' : 'not-allowed',
-                    letterSpacing: '2px',
-                }}>
-                {draftPicked ? '⚔️ 儀式へ進む' : 'カードを選択してください'}
-            </button>
         </div>
     );
 
     return (
         <>
-            {recipeSelectOverlay && ReactDOM.createPortal(recipeSelectOverlay, document.body)}
+            {battleSelectOverlay && ReactDOM.createPortal(battleSelectOverlay, document.body)}
             {/* ───── 盤面オーバーレイ（フラッシュ・コンボ演出） ───── */}
             <div style={{ width: curWidth, height: '100%', position: 'relative', pointerEvents: 'none' }}
                 onClick={() => setPinnedPiece(null)}>
@@ -1410,27 +1277,8 @@ const RitualPhase: React.FC = () => {
                 }}>
                     <span style={{ color: '#ff8844', fontWeight: 'bold' }}>🛠 DEV</span>
                     <span>敵軍:</span>
-                    <select
-                        value={currentPattern}
-                        onChange={e => setPattern(e.target.value)}
-                        style={{
-                            background: '#1a1a2e', color: '#ccc',
-                            border: '1px solid #555', borderRadius: '4px',
-                            padding: '2px 4px', fontSize: '11px', cursor: 'pointer',
-                        }}
-                    >
-                        <option value="random">ランダム（day依存）</option>
-                        <option value="turtle">① 亀甲陣</option>
-                        <option value="swarm">② 雪崩</option>
-                        <option value="archer_wall">③ 弓兵殲滅陣</option>
-                        <option value="vip_guard">④ 精鋭護衛隊（day4+）</option>
-                        <option value="lane_rush">⑤ 縦割り突撃</option>
-                        <option value="priest_loop">⑥ 支援完結型</option>
-                        <option value="phased">⑦ 波状攻撃</option>
-                        <option value="speed_rush">⑧ 奇襲隊</option>
-                    </select>
                     <button
-                        onClick={() => generateWave(currentDay, currentPattern)}
+                        onClick={() => generateBattleOptions(currentDay)}
                         style={{
                             background: '#2a1a3e', color: '#cc88ff',
                             border: '1px solid #664488', borderRadius: '4px',

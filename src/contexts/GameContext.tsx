@@ -6,6 +6,16 @@ import type { HeroType } from '../game/entities';
 
 export type GamePhase = 'TITLE' | 'RITUAL' | 'BATTLE' | 'RESULT';
 
+export interface BattleOption {
+    id: string;
+    label: string;
+    difficulty: 1 | 2 | 3;
+    gruntGroups: { type: HeroType; count: number }[];
+    bossType: HeroType;
+    pieceType: 0 | 1 | 2;   // 0=骨 1=肉 2=霊
+    recipeId: string;
+}
+
 
 
 export interface SummonedUnit {
@@ -64,6 +74,12 @@ interface GameState {
     pixiAppVersion: number; // アプリ初期化/破棄時にインクリメント
     registerPixiApp: (app: any | null) => void;
 
+    // バトル選択 (ローグライク)
+    battleOptions: BattleOption[];
+    selectedBattleOption: BattleOption | null;
+    generateBattleOptions: (day: number) => void;
+    selectBattleOption: (option: BattleOption) => void;
+
     // デバッグモード
     isDebugMode: boolean;
     setIsDebugMode: (v: boolean) => void;
@@ -79,6 +95,8 @@ const GameContext = createContext<GameState | undefined>(undefined);
 export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [phase, setPhase] = useState<GamePhase>('TITLE');
     const [summonedMonsters, setSummonedMonsters] = useState<SummonedUnit[]>([]);
+    const [battleOptions, setBattleOptions] = useState<BattleOption[]>([]);
+    const [selectedBattleOption, setSelectedBattleOption] = useState<BattleOption | null>(null);
 
     // レシピ装備システム（スタートドラフトで初期化）
     const [unlockedRecipes, setUnlockedRecipes] = useState<string[]>([]);
@@ -344,6 +362,95 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIncomingEnemies(enemies);
     }, []);
 
+    // ── バトル選択肢生成 ──────────────────────────────────────────
+    const generateBattleOptions = React.useCallback((day: number) => {
+        const materialSuffix = ['bone', 'meat', 'spirit'] as const;
+
+        // ピース種別をシャッフル（毎回異なる組み合わせ）
+        const pieceTypes: (0 | 1 | 2)[] = [0, 1, 2];
+        for (let i = 2; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pieceTypes[i], pieceTypes[j]] = [pieceTypes[j], pieceTypes[i]];
+        }
+
+        const pickRecipe = (pt: 0 | 1 | 2): string => {
+            const suffix = materialSuffix[pt];
+            const cands = ALL_RECIPES.filter(r =>
+                r.id.endsWith(`_${suffix}`) && !equippedRecipes.includes(r.id)
+            );
+            if (cands.length > 0) return cands[Math.floor(Math.random() * cands.length)].id;
+            const any = ALL_RECIPES.filter(r => !equippedRecipes.includes(r.id));
+            return (any[0] || ALL_RECIPES[0]).id;
+        };
+
+        const boss1: HeroType = day >= 7 ? '聖騎士' : '剣士';
+        const boss2: HeroType = day >= 9 ? 'パラディン' : '重騎士';
+        const boss3: HeroType = day >= 11 ? '勇者' : day >= 7 ? '大魔道士' : '魔法使い';
+
+        const c1 = 2 + Math.floor(day * 0.8);
+        const c2 = 2 + Math.floor(day * 0.6);
+        const c3 = 2 + Math.floor(day * 0.5);
+
+        const options: BattleOption[] = [
+            {
+                id: `opt-${day}-0`, label: '落ち武者の群れ', difficulty: 1,
+                gruntGroups: [
+                    { type: '農夫', count: Math.max(2, Math.ceil(c1 * 0.6)) },
+                    { type: '村人', count: Math.max(1, Math.floor(c1 * 0.4)) },
+                ],
+                bossType: boss1, pieceType: pieceTypes[0], recipeId: pickRecipe(pieceTypes[0]),
+            },
+            {
+                id: `opt-${day}-1`, label: '国境の守備隊', difficulty: 2,
+                gruntGroups: [
+                    { type: '弓兵', count: Math.max(2, Math.ceil(c2 * 0.6)) },
+                    { type: '剣士', count: Math.max(1, Math.floor(c2 * 0.4)) },
+                ],
+                bossType: boss2, pieceType: pieceTypes[1], recipeId: pickRecipe(pieceTypes[1]),
+            },
+            {
+                id: `opt-${day}-2`, label: '王国精鋭部隊', difficulty: 3,
+                gruntGroups: [
+                    { type: '魔法使い', count: Math.max(2, Math.ceil(c3 * 0.5)) },
+                    { type: '重騎士',   count: Math.max(1, Math.floor(c3 * 0.3)) },
+                ],
+                bossType: boss3, pieceType: pieceTypes[2], recipeId: pickRecipe(pieceTypes[2]),
+            },
+        ];
+
+        setBattleOptions(options);
+        setSelectedBattleOption(null);
+    }, [equippedRecipes]);
+
+    const selectBattleOption = React.useCallback((option: BattleOption) => {
+        setSelectedBattleOption(option);
+
+        type EnemyEntry = { id: string; type: string; row: number; col: number; isElite?: boolean; isBoss?: boolean };
+
+        const usedByCol = new Map<number, Set<number>>();
+        const placeAt = (col: number): number => {
+            if (!usedByCol.has(col)) usedByCol.set(col, new Set());
+            const used = usedByCol.get(col)!;
+            const avail = Array.from({ length: ROWS }, (_, k) => k).filter(k => !used.has(k));
+            const row = avail.length > 0 ? avail[Math.floor(Math.random() * avail.length)] : Math.floor(Math.random() * ROWS);
+            used.add(row);
+            return row;
+        };
+
+        const enemies: EnemyEntry[] = [];
+        let idx = 0;
+        option.gruntGroups.forEach(({ type, count }) => {
+            for (let i = 0; i < count; i++) {
+                const col = Math.floor(Math.random() * 7);
+                enemies.push({ id: `e-${option.id}-${idx++}`, type, row: placeAt(col), col });
+            }
+        });
+        // ボスは中央列に固定配置
+        enemies.push({ id: `boss-${option.id}`, type: option.bossType, row: placeAt(4), col: 4, isBoss: true });
+
+        setIncomingEnemies(enemies);
+    }, []);
+
     const resetGame = React.useCallback(() => {
         setSummonedMonsters([]);
         setUnlockedRecipes([]);
@@ -372,6 +479,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             expectedSummons, setExpectedSummons,
             fieldWidth, incomingEnemies, generateWave, currentPattern, setPattern,
             pixiAppRef, pixiAppVersion, registerPixiApp,
+            battleOptions, selectedBattleOption, generateBattleOptions, selectBattleOption,
             isDebugMode, setIsDebugMode, addIncomingEnemy, clearIncomingEnemies, updateIncomingEnemy,
             debugGridClearSignal, triggerDebugGridClear
         }}>
