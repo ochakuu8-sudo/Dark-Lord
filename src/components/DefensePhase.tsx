@@ -176,20 +176,20 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         s.wave = 0; s.waveInProgress = false; s.phaseEnded = false;
         incomingEnemies.forEach(en => {
             const stats = UNIT_STATS[en.type] || UNIT_STATS['村人'];
-            const isBoss = !!en.isBoss;
-            const hpMult  = isBoss ? 6 : (en.isElite ? 2 : 1);
-            const atkMult = isBoss ? 3 : (en.isElite ? 1.8 : 1);
+            const isElite = !!en.isElite;
+            const hpMult  = isElite ? 2 : 1;
+            const atkMult = isElite ? 1.8 : 1;
             const finalHp = Math.floor(stats.maxHp! * hpMult);
+            if (isElite) s.eliteIds.add(en.id);
             s.entities.push({
                 id: en.id, type: en.type, faction: 'HERO',
                 x: BOARD_WIDTH + en.col * BLOCK_SIZE + BLOCK_SIZE / 2, y: en.row * BLOCK_SIZE + BLOCK_SIZE / 2,
                 hp: finalHp, maxHp: finalHp,
                 attack: stats.attack! * atkMult, range: stats.range!,
-                speed: stats.speed! * (isBoss ? 1.2 : (en.isElite ? 1.15 : 1)),
+                speed: stats.speed! * (isElite ? 1.15 : 1),
                 cooldown: Math.random() * 40, maxCooldown: stats.maxCooldown!,
-                color: isBoss ? 0xff4400 : (en.isElite ? 0xffd700 : stats.color!),
-                size: isBoss ? Math.round((stats.size ?? 18) * 1.5) : stats.size,
-                isBoss,
+                color: isElite ? 0xffd700 : stats.color!,
+                size: stats.size,
             });
         });
     }, [phase, incomingEnemies]);
@@ -464,11 +464,10 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
         s.currentIncomingEnemies.forEach(en => {
             const stats = UNIT_STATS[en.type] || UNIT_STATS['村人'];
-            const isBoss = !!en.isBoss;
-            const isElite = en.isElite && !isBoss;
+            const isElite = !!en.isElite;
             if (isElite) s.eliteIds.add(en.id);
-            const hpMult  = isBoss ? 6 : (isElite ? 2 : 1);
-            const atkMult = isBoss ? 3 : (isElite ? 1.8 : 1);
+            const hpMult  = isElite ? 2 : 1;
+            const atkMult = isElite ? 1.8 : 1;
             const finalHp = Math.floor(stats.maxHp! * hpMult);
             s.entities.push({
                 id: en.id, type: en.type, faction: 'HERO',
@@ -476,11 +475,10 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 y: en.row * BLOCK_SIZE + BLOCK_SIZE / 2,
                 hp: finalHp, maxHp: finalHp,
                 attack: stats.attack! * atkMult, range: stats.range!,
-                speed: stats.speed! * (isBoss ? 1.2 : (isElite ? 1.15 : 1)),
+                speed: stats.speed! * (isElite ? 1.15 : 1),
                 cooldown: Math.random() * 40, maxCooldown: stats.maxCooldown!,
-                color: isBoss ? 0xff4400 : (isElite ? 0xffd700 : stats.color!),
-                size: isBoss ? Math.round((stats.size ?? 18) * 1.5) : stats.size,
-                isBoss,
+                color: isElite ? 0xffd700 : stats.color!,
+                size: stats.size,
             });
         });
 
@@ -877,14 +875,8 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
                     const opt = selectedBattleOptionRef.current;
                     if (opt) {
-                        if (ent.isBoss) {
-                            // ボス撃破: レシピ獲得
-                            addEquippedRecipe(opt.recipeId);
-                            pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 30, text: '📜 レシピ獲得!', life: 100, maxLife: 100, color: 0xffdd44 });
-                        } else {
-                            // 雑魚撃破: ピース素材1個獲得
-                            addPendingPuzzlePiece(opt.pieceType);
-                        }
+                        // 雑魚撃破: ピース素材1個獲得
+                        addPendingPuzzlePiece(opt.pieceType);
                     }
 
                     // Necromancer Guide effect (Relic)
@@ -1600,9 +1592,14 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         }
         s.projectiles = aliveProjectiles;
 
-        // Win condition: 英雄軍が全滅
+        // Win condition: 英雄軍が全滅 → 全滅報酬（レシピ）を付与
         if (heroCount === 0 && demonCount > 0 && s.waveInProgress && !s.phaseEnded) {
             s.phaseEnded = true;
+            const opt = selectedBattleOptionRef.current;
+            if (opt) {
+                addEquippedRecipe(opt.recipeId);
+                pushFloatingText(s.floatingTexts, { id: generateId(), x: BOARD_WIDTH + 200, y: ROWS * BLOCK_SIZE / 2, text: '📜 全滅ボーナス！レシピ獲得！', life: 150, maxLife: 150, color: 0xffdd44, fontSize: 22 });
+            }
             setTimeout(() => {
                 incrementDay();
                 setPhase('RITUAL');
@@ -1727,8 +1724,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         });
 
         stateRef.current.entities.forEach(ent => {
-            const isBoss = ent.id.startsWith('boss-');
-            const sz = isBoss ? 30 : (ent.faction === 'HERO' ? 15 : (ent.size ?? 18));
+            const sz = ent.faction === 'HERO' ? 15 : (ent.size ?? 18);
             const isElite = ent.faction === 'HERO' && stateRef.current.eliteIds.has(ent.id);
             let g = entityGfxPool.current.get(ent.id);
 

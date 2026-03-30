@@ -445,8 +445,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 enemies.push({ id: `e-${option.id}-${idx++}`, type, row: placeAt(col), col });
             }
         });
-        // ボスは中央列に固定配置
-        enemies.push({ id: `boss-${option.id}`, type: option.bossType, row: placeAt(4), col: 4, isBoss: true });
 
         setIncomingEnemies(enemies);
     }, []);
