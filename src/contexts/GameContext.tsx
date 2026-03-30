@@ -59,6 +59,10 @@ interface GameState {
     currentPattern: string;
     setPattern: (id: string) => void;
 
+    // スコア（生き残ったwave数）
+    finalScore: number;
+    setFinalScore: (score: number) => void;
+
     // 共有PIXIアプリ（DefensePhaseが所有、RitualPhaseが借用）
     pixiAppRef: React.MutableRefObject<any | null>;
     pixiAppVersion: number; // アプリ初期化/破棄時にインクリメント
@@ -98,6 +102,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const [pendingPuzzlePieces, setPendingPuzzlePieces] = useState<number[]>([]);
     const [isDebugMode, setIsDebugMode] = useState<boolean>(false);
+    const [finalScore, setFinalScore] = useState<number>(0);
     const [debugGridClearSignal, setDebugGridClearSignal] = useState<number>(0);
     const triggerDebugGridClear = React.useCallback(() => setDebugGridClearSignal(v => v + 1), []);
 
@@ -206,7 +211,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return row;
         };
         const unit = (idx: number, type: HeroType, col: number, elite = false): EnemyEntry => ({
-            id: `e-${day}-${idx}`, type, row: placeAt(col), col, isElite: elite
+            id: `e-${day}-${idx}`, type, row: placeAt(col), col, isElite: elite,
+            hpScale, atkScale
         });
 
         // 利用可能パターン（day4未満はvip_guardを除外）
@@ -222,6 +228,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // day に応じたエリート出現率（最大40%）
         const eliteChance = Math.min(0.05 * (day - 1), 0.40);
         const elite = (threshold = eliteChance) => Math.random() < threshold;
+
+        // エンドレスwaveのスタットスケーリング（dayが上がるほど敵が強くなる）
+        // HP: 10%/wave、ATK: 7%/wave で線形増加
+        const hpScale = 1.0 + (day - 1) * 0.10;
+        const atkScale = 1.0 + (day - 1) * 0.07;
 
         if (pid === 'turtle') {
             // 亀甲陣: 重騎士/パラディンで前列密集＋後方プリースト
@@ -268,7 +279,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         } else if (pid === 'vip_guard') {
             // 精鋭護衛隊: 勇者を聖騎士/重騎士が囲む（勇者は固定ステータス、dayで護衛の強度変化）
-            enemies.push({ id: `vip-${day}`, type: '勇者', row: 4, col: 4 });
+            enemies.push({ id: `vip-${day}`, type: '勇者', row: 4, col: 4, hpScale, atkScale });
             const guardPositions = [
                 [3,3],[4,3],[5,3],[3,4],[5,4],[3,5],[4,5],[5,5]
             ];
@@ -289,7 +300,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     day >= 3 ? ['剣士', '重騎士', '弓兵'] :
                     ['剣士', '農夫', '弓兵'];
                 const type = types[Math.floor(Math.random() * types.length)];
-                enemies.push({ id: `e-${day}-${i}`, type, row, col, isElite: elite() });
+                enemies.push({ id: `e-${day}-${i}`, type, row, col, isElite: elite(), hpScale, atkScale });
             }
 
         } else if (pid === 'priest_loop') {
@@ -356,6 +367,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setExpectedSummons([]);
         setIncomingEnemies([]);
         setIsDebugMode(false);
+        setFinalScore(0);
     }, []);
 
     return (
@@ -373,7 +385,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             fieldWidth, incomingEnemies, generateWave, currentPattern, setPattern,
             pixiAppRef, pixiAppVersion, registerPixiApp,
             isDebugMode, setIsDebugMode, addIncomingEnemy, clearIncomingEnemies, updateIncomingEnemy,
-            debugGridClearSignal, triggerDebugGridClear
+            debugGridClearSignal, triggerDebugGridClear,
+            finalScore, setFinalScore
         }}>
             {children}
         </GameContext.Provider>

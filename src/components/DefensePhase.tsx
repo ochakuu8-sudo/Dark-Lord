@@ -101,6 +101,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         incomingEnemies, ownedRelics, addPendingPuzzlePiece,
         expectedSummons, fieldWidth, registerPixiApp, ritualGrid,
         isDebugMode, updateIncomingEnemy,
+        currentDay, setFinalScore,
     } = useGame();
     const spawnUnitFnRef = useRef<((type: string) => void) | null>(null);
     const pixiContainerRef = useRef<HTMLDivElement>(null);
@@ -157,12 +158,15 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         s.wave = 0; s.waveInProgress = false; s.phaseEnded = false;
         incomingEnemies.forEach(en => {
             const stats = UNIT_STATS[en.type] || UNIT_STATS['村人'];
-            const finalHp = Math.floor(stats.maxHp! * (en.isElite ? 2 : 1));
+            const eliteMult = en.isElite ? 2 : 1;
+            const hpScale = en.hpScale ?? 1;
+            const atkScale = en.atkScale ?? 1;
+            const finalHp = Math.floor(stats.maxHp! * eliteMult * hpScale);
             s.entities.push({
                 id: en.id, type: en.type, faction: 'HERO',
                 x: BOARD_WIDTH + en.col * BLOCK_SIZE + BLOCK_SIZE / 2, y: en.row * BLOCK_SIZE + BLOCK_SIZE / 2,
                 hp: finalHp, maxHp: finalHp,
-                attack: stats.attack! * (en.isElite ? 1.8 : 1), range: stats.range!,
+                attack: stats.attack! * (en.isElite ? 1.8 : 1) * atkScale, range: stats.range!,
                 speed: stats.speed! * (en.isElite ? 1.15 : 1),
                 cooldown: Math.random() * 40, maxCooldown: stats.maxCooldown!,
                 color: en.isElite ? 0xffd700 : stats.color!,
@@ -1568,6 +1572,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         // Lose condition: DEMONが全滅
         if (demonCount === 0 && !s.phaseEnded) {
             s.phaseEnded = true;
+            setFinalScore(currentDay);
             setTimeout(() => setPhase('RESULT'), 1500);
         }
 

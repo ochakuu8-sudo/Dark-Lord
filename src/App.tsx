@@ -18,7 +18,7 @@ const COMMON_3PIECE_RECIPES = ALL_RECIPES.filter(r =>
 );
 
 const GameController: React.FC = () => {
-  const { phase, setPhase, resetGame, isDebugMode, setIsDebugMode, unlockRecipe, addEquippedRecipe } = useGame();
+  const { phase, setPhase, resetGame, isDebugMode, setIsDebugMode, unlockRecipe, addEquippedRecipe, finalScore } = useGame();
   // 骨/肉/霊から各1枚ランダムに選んで即装備
   const startNormalGame = () => {
     setIsDebugMode(false);
@@ -72,6 +72,16 @@ const GameController: React.FC = () => {
       {phase === 'RESULT' && (
         <div className="result-screen">
           <h1>{isDebugMode ? '戦闘終了' : '拠点陥落...'}</h1>
+          {!isDebugMode && (
+            <div style={{ margin: '16px 0' }}>
+              <div style={{ fontSize: '28px', color: '#ffcc44', fontWeight: 'bold' }}>
+                Wave {finalScore} まで生き残った
+              </div>
+              <div style={{ fontSize: '14px', color: '#aaa', marginTop: '6px' }}>
+                次は Wave {finalScore + 1} を目指せ
+              </div>
+            </div>
+          )}
           <p>{isDebugMode ? 'デバッグ戦闘が終了しました。' : '魔王の城は勇者たちの手に落ちた。'}</p>
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
             {isDebugMode && (
