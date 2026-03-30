@@ -67,6 +67,22 @@ interface FloatingText {
     fontSize?: number;
 }
 
+import type { PassiveAbility } from '../game/entities';
+
+function buildPassiveCache(abilities?: PassiveAbility[]): Partial<Record<PassiveAbility['type'], PassiveAbility>> {
+    if (!abilities || abilities.length === 0) return {};
+    const cache: Partial<Record<PassiveAbility['type'], PassiveAbility>> = {};
+    for (const pa of abilities) cache[pa.type] = pa;
+    return cache;
+}
+
+const MAX_FLOATING_TEXTS = 30;
+type FT = { id: string; x: number; y: number; text: string; life: number; maxLife: number; color: number; fontSize?: number };
+function pushFloatingText(arr: FT[], item: FT) {
+    if (arr.length >= MAX_FLOATING_TEXTS) arr.shift();
+    arr.push(item);
+}
+
 function getProjectileStyle(type: string): ProjectileStyle {
     if (type.includes('ボマー') || type.includes('爆弾') || type.includes('特攻') || type.includes('デモリ') || type.includes('アルマゲ')) return 'bomb';
     if (type.includes('スライム') || type.includes('インプ') || type.includes('シャーマン') || type.includes('霊魂') || type.includes('精霊') || type.includes('魔') || type.includes('大魔')) return 'orb';
@@ -239,6 +255,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 size: stats.size,
                 accuracy: stats.accuracy,
                 passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined,
+                passiveCache: buildPassiveCache(stats.passiveAbilities),
                 stealthActive: hasStealthPassive ? true : undefined,
                 spawnedAt: 0,
             });
@@ -273,6 +290,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 size: stats.size,
                 accuracy: stats.accuracy,
                 passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined,
+                passiveCache: buildPassiveCache(stats.passiveAbilities),
                 stealthActive: hasStealthPassive2 ? true : undefined,
                 spawnedAt: stateRef.current.frameCount,
             };
@@ -503,7 +521,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         let bouncesLeft = 0;
         let projLifetime: number | undefined;
         if (attacker.passiveAbilities) {
-            const bounceAbility = attacker.passiveAbilities.find(pa => pa.type === 'BOUNCE_SHOT');
+            const bounceAbility = attacker.passiveCache?.['BOUNCE_SHOT'];
             if (bounceAbility) {
                 bouncesLeft = bounceAbility.value || 2;
                 projLifetime = 240; // 4 seconds of bouncing at 60fps
@@ -559,13 +577,13 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             if (dmgRaw < 0) {
                 // Heal
                 targetEnt.hp = Math.min(targetEnt.maxHp, targetEnt.hp - dmgRaw);
-                s.floatingTexts.push({ id: generateId(), x: targetEnt.x, y: targetEnt.y - 15, text: '+' + Math.floor(-dmgRaw), life: 55, maxLife: 55, color: 0x44ff44 });
+                pushFloatingText(s.floatingTexts, { id: generateId(), x: targetEnt.x, y: targetEnt.y - 15, text: '+' + Math.floor(-dmgRaw), life: 55, maxLife: 55, color: 0x44ff44 });
             } else {
                 let finalDamage = dmgRaw;
 
                 // RANGED_RESIST: reduce projectile damage
                 if (fromProjectile && targetEnt.passiveAbilities) {
-                    const rangedResist = targetEnt.passiveAbilities.find(pa => pa.type === 'RANGED_RESIST');
+                    const rangedResist = targetEnt.passiveCache?.['RANGED_RESIST'];
                     if (rangedResist) finalDamage *= (rangedResist.value ?? 0.5);
                 }
 
@@ -574,7 +592,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     let buffCount = 0;
                     for (const other of entities) {
                         if (other.hp > 0 && other.faction === 'DEMON' && other.passiveAbilities) {
-                            const ba = other.passiveAbilities.find(pa => pa.type === 'ATK_BUFF');
+                            const ba = other.passiveCache?.['ATK_BUFF'];
                             if (ba && Math.hypot(other.x - attacker.x, other.y - attacker.y) < (ba.range || 120)) {
                                 buffCount++;
                             }
@@ -603,15 +621,15 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 const hitColor = targetEnt.faction === 'DEMON' ? 0xff4444 : 0x88ff88;
                 const dmgAmt = Math.floor(finalDamage);
                 const dmgFontSize = Math.min(32, Math.max(16, 16 + Math.floor(dmgAmt / 20)));
-                s.floatingTexts.push({ id: generateId(), x: targetEnt.x + (Math.random() - 0.5) * 20, y: targetEnt.y - 20, text: '-' + dmgAmt, life: 50, maxLife: 50, color: hitColor, fontSize: dmgFontSize });
+                pushFloatingText(s.floatingTexts, { id: generateId(), x: targetEnt.x + (Math.random() - 0.5) * 20, y: targetEnt.y - 20, text: '-' + dmgAmt, life: 50, maxLife: 50, color: hitColor, fontSize: dmgFontSize });
 
                 // REFLECT Ability (Bone Orc)
                 if (targetEnt.passiveAbilities && attacker && attacker.hp > 0) {
-                    const reflect = targetEnt.passiveAbilities.find(pa => pa.type === 'REFLECT');
+                    const reflect = targetEnt.passiveCache?.['REFLECT'];
                     if (reflect && reflect.value) {
                         const reflectedDmg = finalDamage * reflect.value;
                         attacker.hp -= reflectedDmg;
-                        s.floatingTexts.push({ id: generateId(), x: attacker.x, y: attacker.y - 15, text: '💥反射 ' + Math.floor(reflectedDmg), life: 40, maxLife: 40, color: 0xcccccc });
+                        pushFloatingText(s.floatingTexts, { id: generateId(), x: attacker.x, y: attacker.y - 15, text: '💥反射 ' + Math.floor(reflectedDmg), life: 40, maxLife: 40, color: 0xcccccc });
                         // Reflection particles
                         for (let k = 0; k < 2; k++) {
                             s.particles.push({ id: generateId(), x: targetEnt.x, y: targetEnt.y, vx: (attacker.x - targetEnt.x) * 0.05, vy: (attacker.y - targetEnt.y) * 0.05, color: 0xdddddd, life: 15 });
@@ -621,7 +639,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
                 // LIFESTEAL: attacker heals from damage dealt
                 if (attacker && attacker.hp > 0 && attacker.passiveAbilities) {
-                    const lifesteal = attacker.passiveAbilities.find(pa => pa.type === 'LIFESTEAL');
+                    const lifesteal = attacker.passiveCache?.['LIFESTEAL'];
                     if (lifesteal) {
                         const healAmt = finalDamage * (lifesteal.value || 0.3);
                         attacker.hp = Math.min(attacker.maxHp, attacker.hp + healAmt);
@@ -633,7 +651,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
                 // POISON: set poisonedFrames on target
                 if (attacker && attacker.passiveAbilities) {
-                    const poison = attacker.passiveAbilities.find(pa => pa.type === 'POISON');
+                    const poison = attacker.passiveCache?.['POISON'];
                     if (poison && targetEnt.hp > 0) {
                         targetEnt.poisonedFrames = poison.range || 180;
                     }
@@ -666,17 +684,17 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         const a = Math.random() * Math.PI * 2;
                         s.particles.push({ id: generateId(), x: ent.x, y: ent.y, vx: Math.cos(a) * 4, vy: Math.sin(a) * 4 - 1, color: 0xff6600, life: 50 });
                     }
-                    s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💥 AoE!', life: 70, maxLife: 70, color: 0xff6600 });
+                    pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '💥 AoE!', life: 70, maxLife: 70, color: 0xff6600 });
                 }
                 // PIECE_RETURN Ability (Bone Necromancer)
                 if (ent.faction === 'DEMON') {
                     // Check if a Bone Necromancer is nearby
                     for (const other of entities) {
                         if (other.hp > 0 && other.faction === 'DEMON' && other.passiveAbilities) {
-                            const ability = other.passiveAbilities.find(pa => pa.type === 'PIECE_RETURN');
+                            const ability = other.passiveCache?.['PIECE_RETURN'];
                             if (ability && Math.hypot(other.x - ent.x, other.y - ent.y) < (ability.range || 150)) {
                                 addPendingPuzzlePiece(0); // 常に骨を返却
-                                s.floatingTexts.push({ id: generateId(), x: other.x, y: other.y - 30, text: '♻️骨の回収', life: 60, maxLife: 60, color: 0xffffff });
+                                pushFloatingText(s.floatingTexts, { id: generateId(), x: other.x, y: other.y - 30, text: '♻️骨の回収', life: 60, maxLife: 60, color: 0xffffff });
                                 break;
                             }
                         }
@@ -685,7 +703,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     // CORPSE_EXPLOSION Ability (Spirit Necromancer)
                     for (const other of entities) {
                         if (other.hp > 0 && other.faction === 'DEMON' && other.passiveAbilities) {
-                            const ability = other.passiveAbilities.find(pa => pa.type === 'CORPSE_EXPLOSION');
+                            const ability = other.passiveCache?.['CORPSE_EXPLOSION'];
                             if (ability && Math.hypot(other.x - ent.x, other.y - ent.y) < (ability.range || 150)) {
                                 const expDmg = other.attack * (ability.value || 1);
                                 // Visual & Damage
@@ -698,7 +716,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                     const a = Math.random() * Math.PI * 2;
                                     s.particles.push({ id: generateId(), x: ent.x, y: ent.y, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3, color: 0xaa00ff, life: 30 });
                                 }
-                                s.floatingTexts.push({ id: generateId(), x: other.x, y: other.y - 30, text: '💥死霊爆発', life: 60, maxLife: 60, color: 0xaa00ff });
+                                pushFloatingText(s.floatingTexts, { id: generateId(), x: other.x, y: other.y - 30, text: '💥死霊爆発', life: 60, maxLife: 60, color: 0xaa00ff });
                                 break;
                             }
                         }
@@ -708,7 +726,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 // DEMON death passives
                 if (ent.faction === 'DEMON' && ent.passiveAbilities) {
                     // ON_DEATH_SPAWN (skeleton_meat): spawn skeleton_bone at death position
-                    const onDeathSpawn = ent.passiveAbilities.find(pa => pa.type === 'ON_DEATH_SPAWN');
+                    const onDeathSpawn = ent.passiveCache?.['ON_DEATH_SPAWN'];
                     if (onDeathSpawn) {
                         const spawnType = 'skeleton_bone';
                         const spStats = UNIT_STATS[spawnType];
@@ -726,12 +744,12 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                 spawnedAt: s.frameCount,
                             };
                             aliveEntities.push(spawnEnt);
-                            s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💀転生', life: 50, maxLife: 50, color: 0xaaaacc });
+                            pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '💀転生', life: 50, maxLife: 50, color: 0xaaaacc });
                         }
                     }
 
                     // EXPLODE_PROJECTILE (wisp_bone): fire 4 piercing projectiles on death
-                    const explodeProj = ent.passiveAbilities.find(pa => pa.type === 'EXPLODE_PROJECTILE');
+                    const explodeProj = ent.passiveCache?.['EXPLODE_PROJECTILE'];
                     if (explodeProj) {
                         const exDmg = explodeProj.value || 200;
                         for (let k = 0; k < 4; k++) {
@@ -749,11 +767,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                 sourceId: ent.id, fromProjectile: false,
                             });
                         }
-                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💥爆裂弾!', life: 50, maxLife: 50, color: 0xeeeeff });
+                        pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '💥爆裂弾!', life: 50, maxLife: 50, color: 0xeeeeff });
                     }
 
                     // EXPLODE_HEAL (wisp_meat): heal allies on death explosion
-                    const explodeHeal = ent.passiveAbilities.find(pa => pa.type === 'EXPLODE_HEAL');
+                    const explodeHeal = ent.passiveCache?.['EXPLODE_HEAL'];
                     if (explodeHeal) {
                         const healRange = explodeHeal.range || 120;
                         const healAmt = explodeHeal.value || 300;
@@ -763,11 +781,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                             }
                         });
                         s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: healRange, life: 20, maxLife: 20, color: 0x44ff88 });
-                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💚癒し爆発!', life: 50, maxLife: 50, color: 0x44ff88 });
+                        pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '💚癒し爆発!', life: 50, maxLife: 50, color: 0x44ff88 });
                     }
 
                     // CHARGE_EXPLOSION (wisp_spirit): bonus explosion damage from survival time
-                    const chargeExplosion = ent.passiveAbilities.find(pa => pa.type === 'CHARGE_EXPLOSION');
+                    const chargeExplosion = ent.passiveCache?.['CHARGE_EXPLOSION'];
                     if (chargeExplosion) {
                         const baseDmg = chargeExplosion.value || 100;
                         const survived = ent.spawnedAt !== undefined ? (s.frameCount - ent.spawnedAt) : 0;
@@ -779,7 +797,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                             }
                         });
                         s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: expR, life: 20, maxLife: 20, color: 0x9966ff });
-                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: `⚡チャージ爆発 ${Math.floor(totalDmg)}!`, life: 60, maxLife: 60, color: 0x9966ff });
+                        pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: `⚡チャージ爆発 ${Math.floor(totalDmg)}!`, life: 60, maxLife: 60, color: 0x9966ff });
                     }
 
                     // ALLY_DEATH_EXPLOSION: other necromancer_meats react when this demon dies
@@ -792,7 +810,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     if (ent.faction === 'DEMON') {
                         for (const other of entities) {
                             if (other.hp > 0 && other.faction === 'DEMON' && other.passiveAbilities && other.id !== ent.id) {
-                                const allyDeathExp = other.passiveAbilities.find(pa => pa.type === 'ALLY_DEATH_EXPLOSION');
+                                const allyDeathExp = other.passiveCache?.['ALLY_DEATH_EXPLOSION'];
                                 if (allyDeathExp && Math.hypot(other.x - ent.x, other.y - ent.y) <= (allyDeathExp.range || 100)) {
                                     const expDmg = allyDeathExp.value || 150;
                                     const expR = allyDeathExp.range || 100;
@@ -802,7 +820,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                         }
                                     });
                                     s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: expR, life: 18, maxLife: 18, color: 0xff4444 });
-                                    s.floatingTexts.push({ id: generateId(), x: other.x, y: other.y - 20, text: '💀怒り爆発!', life: 50, maxLife: 50, color: 0xff4444 });
+                                    pushFloatingText(s.floatingTexts, { id: generateId(), x: other.x, y: other.y - 20, text: '💀怒り爆発!', life: 50, maxLife: 50, color: 0xff4444 });
                                 }
                             }
                         }
@@ -812,7 +830,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     if (ent.faction === 'HERO') {
                         for (const other of entities) {
                             if (other.hp > 0 && other.faction === 'DEMON' && other.passiveAbilities) {
-                                const enemyDeathSpawn = other.passiveAbilities.find(pa => pa.type === 'ENEMY_DEATH_SPAWN');
+                                const enemyDeathSpawn = other.passiveCache?.['ENEMY_DEATH_SPAWN'];
                                 if (enemyDeathSpawn) {
                                     const spawnType = 'skeleton_spirit';
                                     const spStats = UNIT_STATS[spawnType];
@@ -830,7 +848,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                             spawnedAt: s.frameCount,
                                         };
                                         aliveEntities.push(spawnEnt);
-                                        s.floatingTexts.push({ id: generateId(), x: other.x, y: other.y - 20, text: '👻霊召喚', life: 50, maxLife: 50, color: 0x7700cc });
+                                        pushFloatingText(s.floatingTexts, { id: generateId(), x: other.x, y: other.y - 20, text: '👻霊召喚', life: 50, maxLife: 50, color: 0x7700cc });
                                     }
                                     break; // one summon per death
                                 }
@@ -1003,7 +1021,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 // Windup complete → start dash toward nearest enemy
                 if (ent.chargeWindup <= 0) {
                     ent.chargeWindup = 0;
-                    const chargeAbility = ent.passiveAbilities?.find(pa => pa.type === 'CHARGE');
+                    const chargeAbility = ent.passiveCache?.['CHARGE'];
                     let dashTarget: EntityState | null = null;
                     let dashDist = Infinity;
                     for (const other of entities) {
@@ -1018,7 +1036,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         ent.dashVx = Math.cos(dashAngle) * 20;
                         ent.dashVy = Math.sin(dashAngle) * 20;
                         ent.dashFrames = 40;
-                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💨突進!', life: 45, maxLife: 45, color: 0xff6600 });
+                        pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '💨突進!', life: 45, maxLife: 45, color: 0xff6600 });
                     }
                     ent.chargeFrames = chargeAbility?.cooldown ?? 360;
                 }
@@ -1029,7 +1047,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 ent.dashFrames = (ent.dashFrames ?? 0) - delta;
                 ent.x += (ent.dashVx || 0) * delta;
                 ent.y += (ent.dashVy || 0) * delta;
-                const chargeAbility = ent.passiveAbilities?.find(pa => pa.type === 'CHARGE');
+                const chargeAbility = ent.passiveCache?.['CHARGE'];
                 const chargeDmg = chargeAbility?.value || 300;
                 const aoeR = 80;
                 let dashHit = false;
@@ -1043,7 +1061,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         });
                         s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: aoeR, life: 22, maxLife: 22, color: 0xff6600 });
                         // KNOCKBACK on charge hit
-                        const knockback = ent.passiveAbilities?.find(pa => pa.type === 'KNOCKBACK');
+                        const knockback = ent.passiveCache?.['KNOCKBACK'];
                         if (knockback) {
                             const kbDist = knockback.value || 120;
                             const kbAngle = Math.atan2(other.y - ent.y, other.x - ent.x);
@@ -1067,7 +1085,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             // CHARGE ability: trigger windup when enemy enters range
             if (ent.faction === 'DEMON' && ent.passiveAbilities && target && !ent.isDashing &&
                 (ent.chargeWindup === undefined || ent.chargeWindup <= 0)) {
-                const chargeAbility = ent.passiveAbilities.find(pa => pa.type === 'CHARGE');
+                const chargeAbility = ent.passiveCache?.['CHARGE'];
                 if (chargeAbility && (ent.chargeFrames === undefined || ent.chargeFrames <= 0)) {
                     const chargeTriggerRange = chargeAbility.range || 200;
                     if (minDist <= chargeTriggerRange) {
@@ -1076,7 +1094,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                             const a = Math.random() * Math.PI * 2;
                             s.particles.push({ id: generateId(), x: ent.x + Math.cos(a) * 18, y: ent.y + Math.sin(a) * 18, vx: -Math.cos(a), vy: -Math.sin(a), color: 0xff8800, life: 30 });
                         }
-                        s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '⚡溜め中…', life: 90, maxLife: 90, color: 0xffaa00 });
+                        pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '⚡溜め中…', life: 90, maxLife: 90, color: 0xffaa00 });
                     }
                 }
             }
@@ -1092,13 +1110,13 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         // BERSERK: boost attack when low HP
                         let effectiveAttack = ent.attack;
                         if (ent.passiveAbilities) {
-                            const berserk = ent.passiveAbilities.find(pa => pa.type === 'BERSERK');
+                            const berserk = ent.passiveCache?.['BERSERK'];
                             if (berserk && ent.hp < ent.maxHp * 0.5) {
                                 effectiveAttack = ent.attack * (berserk.value || 2.0);
                             }
                         }
 
-                        const instantAoe = ent.passiveAbilities?.find(pa => pa.type === 'INSTANT_AOE');
+                        const instantAoe = ent.passiveCache?.['INSTANT_AOE'];
                         if (instantAoe) {
                             // 弾なし：敵の位置に直接範囲ダメージ
                             const aoeRadius = instantAoe.range || 120;
@@ -1121,7 +1139,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                             const style = getProjectileStyle(ent.type);
                             if (style === 'sword_flash' || ent.range <= 60) {
                                 // FRONTAL_AOE: cone sweep hitting all enemies in forward arc
-                                const frontalAoe = ent.passiveAbilities?.find(pa => pa.type === 'FRONTAL_AOE');
+                                const frontalAoe = ent.passiveCache?.['FRONTAL_AOE'];
                                 if (frontalAoe) {
                                     const faceAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
                                     const coneHalf = Math.PI / 3; // ±60° = 120° total cone
@@ -1152,7 +1170,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                     applyDamage(target, effectiveAttack, ent);
                                     // KNOCKBACK: push target back
                                     if (ent.passiveAbilities) {
-                                        const knockback = ent.passiveAbilities.find(pa => pa.type === 'KNOCKBACK');
+                                        const knockback = ent.passiveCache?.['KNOCKBACK'];
                                         if (knockback) {
                                             const kbDist = knockback.value || 120;
                                             const kbAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
@@ -1167,7 +1185,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                 }
                             } else {
                                 // MACHINE_GUN: queue burst (fires one shot at a time)
-                                const machineGun = ent.passiveAbilities?.find(pa => pa.type === 'MACHINE_GUN');
+                                const machineGun = ent.passiveCache?.['MACHINE_GUN'];
                                 if (machineGun) {
                                     ent.machineGunQueue = machineGun.value || 6;
                                     ent.machineGunCooldown = 0; // fire first shot immediately
@@ -1191,7 +1209,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         ent.y += Math.sin(a) * ent.speed * delta;
                         // MOVE_REGEN
                         if (ent.passiveAbilities) {
-                            const moveRegen = ent.passiveAbilities.find(pa => pa.type === 'MOVE_REGEN');
+                            const moveRegen = ent.passiveCache?.['MOVE_REGEN'];
                             if (moveRegen) {
                                 const moved = Math.hypot(ent.x - prevX, ent.y - prevY);
                                 ent.hp = Math.min(ent.maxHp, ent.hp + moved * (moveRegen.value || 0.05));
@@ -1216,7 +1234,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     ent.y += Math.sin(a) * ent.speed * delta;
                     // MOVE_REGEN
                     if (ent.passiveAbilities) {
-                        const moveRegen = ent.passiveAbilities.find(pa => pa.type === 'MOVE_REGEN');
+                        const moveRegen = ent.passiveCache?.['MOVE_REGEN'];
                         if (moveRegen) {
                             const moved = Math.hypot(ent.x - prevX, ent.y - prevY);
                             ent.hp = Math.min(ent.maxHp, ent.hp + moved * (moveRegen.value || 0.05));
@@ -1309,10 +1327,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                 size: stats.size,
                                 accuracy: stats.accuracy,
                                 passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined,
+                passiveCache: buildPassiveCache(stats.passiveAbilities),
                                 spawnedAt: s.frameCount,
                             };
                             aliveEntities.push(skel);
-                            s.floatingTexts.push({ id: generateId(), x: ent.x, y: ent.y - 20, text: '💀召喚', life: 60, maxLife: 60, color: 0x44aa44 });
+                            pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '💀召喚', life: 60, maxLife: 60, color: 0x44aa44 });
                         }
                     }
                     if (pa.type === 'SELF_REGEN' && s.frameCount % 60 === 0) {
@@ -1427,7 +1446,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
 
                         // AOE_ON_HIT: deal AoE damage around hit target
                         if (attacker && attacker.passiveAbilities) {
-                            const aoeOnHit = attacker.passiveAbilities.find(pa => pa.type === 'AOE_ON_HIT');
+                            const aoeOnHit = attacker.passiveCache?.['AOE_ON_HIT'];
                             if (aoeOnHit) {
                                 const aoeR = aoeOnHit.range || 80;
                                 const aoeDmg = aoeOnHit.value || 60;
