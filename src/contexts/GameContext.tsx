@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState } from 'react';
-import { ALL_RECIPES, ROWS, BOARD_WIDTH, ENEMY_BOARD_WIDTH } from '../game/config';
+import { ALL_RECIPES, ROWS, BOARD_WIDTH, ENEMY_BOARD_WIDTH, ENEMY_COLS } from '../game/config';
 import type { Recipe } from '../game/config';
 import type { HeroType } from '../game/entities';
 
@@ -197,159 +197,48 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIncomingEnemies(prev => prev.map(e => e.id === id ? { ...e, row, col } : e));
     }, []);
 
-    const generateWave = React.useCallback((day: number, patternId?: string) => {
-        type EnemyEntry = { id: string; type: string; row: number; col: number; isElite?: boolean; hpScale?: number };
+    const generateWave = React.useCallback((day: number, _patternId?: string) => {
+        type EnemyEntry = { id: string; type: string; row: number; col: number; isElite?: boolean; hpScale?: number; atkScale?: number };
 
-        // ユーティリティ: 列ごとに重複しない行をランダムに割り当てる
-        const usedByCol = new Map<number, Set<number>>();
-        const placeAt = (col: number): number => {
-            if (!usedByCol.has(col)) usedByCol.set(col, new Set());
-            const used = usedByCol.get(col)!;
-            const avail = Array.from({ length: ROWS }, (_, k) => k).filter(k => !used.has(k));
-            const row = avail.length > 0 ? avail[Math.floor(Math.random() * avail.length)] : Math.floor(Math.random() * ROWS);
-            used.add(row);
-            return row;
+        // ランダム配置（重複なし）
+        const usedPositions = new Set<string>();
+        const placeRandom = (): { row: number; col: number } => {
+            let row: number, col: number, tries = 0;
+            do {
+                row = Math.floor(Math.random() * ROWS);
+                col = Math.floor(Math.random() * ENEMY_COLS);
+                tries++;
+            } while (usedPositions.has(`${row},${col}`) && tries < 100);
+            usedPositions.add(`${row},${col}`);
+            return { row, col };
         };
-        const unit = (idx: number, type: HeroType, col: number, elite = false): EnemyEntry => ({
-            id: `e-${day}-${idx}`, type, row: placeAt(col), col, isElite: elite,
-            hpScale, atkScale
-        });
 
-        // 利用可能パターン（day4未満はvip_guardを除外）
-        const available = ['turtle', 'swarm', 'archer_wall', 'lane_rush', 'priest_loop', 'phased', 'speed_rush'];
-        if (day >= 4) available.push('vip_guard');
-
-        const pid = (!patternId || patternId === 'random')
-            ? available[Math.floor(Math.random() * available.length)]
-            : patternId;
-
-        let enemies: EnemyEntry[] = [];
-
-        // day に応じたエリート出現率（最大40%）
-        const eliteChance = Math.min(0.05 * (day - 1), 0.40);
-        const elite = (threshold = eliteChance) => Math.random() < threshold;
-
-        // エンドレスwaveのスタットスケーリング（dayが上がるほど敵が強くなる）
-        // HP: 10%/wave、ATK: 7%/wave で線形増加
+        // スタットスケーリング: HP +10%/wave、ATK +7%/wave
         const hpScale = 1.0 + (day - 1) * 0.10;
         const atkScale = 1.0 + (day - 1) * 0.07;
 
-        if (pid === 'turtle') {
-            // 亀甲陣: 重騎士/パラディンで前列密集＋後方プリースト
-            // day1-2: 重騎士のみ  day3+: パラディン混入  day5+: 聖騎士も
-            const count = 3 + day * 2;
-            for (let i = 0; i < count; i++) {
-                const col = i % 3;
-                const type: HeroType =
-                    day >= 5 && col === 0 ? '聖騎士' :
-                    day >= 3 && col === 0 ? 'パラディン' : '重騎士';
-                enemies.push(unit(i, type, col, elite()));
-            }
-            const priests = Math.min(1 + Math.floor(day / 2), 4);
-            for (let i = 0; i < priests; i++) enemies.push(unit(100 + i, 'プリースト', 6 + (i % 2)));
+        // エリート出現率（wave3から開始、最大40%）
+        const eliteChance = Math.min(Math.max(0, (day - 3) * 0.04), 0.40);
 
-        } else if (pid === 'swarm') {
-            // 雪崩: 序盤は村人の群れ、後半は剣士・弓兵が混入
-            const count = 8 + day * 3;
-            for (let i = 0; i < count; i++) {
-                const col = Math.floor(Math.random() * 5);
-                const type: HeroType =
-                    day >= 5 ? (['農夫','剣士','弓兵'] as HeroType[])[Math.floor(Math.random() * 3)] :
-                    day >= 3 ? (Math.random() < 0.5 ? '農夫' : '剣士') :
-                    (Math.random() < 0.5 ? '農夫' : '村人');
-                enemies.push(unit(i, type, col, elite()));
-            }
+        // wave進行で解放されるユニット種別プール
+        const pool: HeroType[] = ['農夫', '村人'];
+        if (day >= 3)  pool.push('弓兵');
+        if (day >= 5)  pool.push('剣士');
+        if (day >= 8)  { pool.push('魔法使い'); pool.push('重騎士'); }
+        if (day >= 12) { pool.push('プリースト'); pool.push('聖騎士'); }
+        if (day >= 16) { pool.push('パラディン'); pool.push('大魔道士'); }
+        if (day >= 22) pool.push('勇者');
 
-        } else if (pid === 'archer_wall') {
-            // 弓兵殲滅陣: 後衛に弓兵・魔法使い密集、前衛タンク数増加
-            const frontCount = 1 + Math.floor(day / 3);
-            for (let i = 0; i < frontCount; i++) {
-                const t: HeroType = day >= 4 ? '重騎士' : '村人';
-                enemies.push(unit(i, t, i % 2, elite()));
-            }
-            const rangedCount = 3 + day * 2;
-            for (let i = 0; i < rangedCount; i++) {
-                const types: HeroType[] =
-                    day >= 5 ? ['弓兵', '魔法使い', '大魔道士', '大魔道士'] :
-                    day >= 3 ? ['弓兵', '魔法使い', '大魔道士'] :
-                    ['弓兵', '魔法使い'];
-                const type = types[Math.floor(Math.random() * types.length)];
-                enemies.push(unit(frontCount + i, type, 5 + (i % 3), elite()));
-            }
+        // 出現数: wave1=2-3体、以降じわじわ増加
+        const baseCount = 2 + Math.floor((day - 1) * 0.8);
+        const count = baseCount + Math.floor(Math.random() * 2);
 
-        } else if (pid === 'vip_guard') {
-            // 精鋭護衛隊: 勇者を聖騎士/重騎士が囲む（勇者は固定ステータス、dayで護衛の強度変化）
-            enemies.push({ id: `vip-${day}`, type: '勇者', row: 4, col: 4, hpScale, atkScale });
-            const guardPositions = [
-                [3,3],[4,3],[5,3],[3,4],[5,4],[3,5],[4,5],[5,5]
-            ];
-            const extraGuards = Math.floor((day - 4) / 2); // day4=0, day6=1, day8=2
-            guardPositions.slice(0, Math.min(guardPositions.length, 4 + extraGuards * 2)).forEach(([r, c], i) => {
-                const type: HeroType = day >= 6 ? '聖騎士' : i % 2 === 0 ? '聖騎士' : '重騎士';
-                enemies.push({ id: `guard-${day}-${i}`, type, row: r, col: c, isElite: elite(0.2 + 0.05 * (day - 4)) });
-            });
-
-        } else if (pid === 'lane_rush') {
-            // 縦割り突撃: 中央レーン集中、dayで剣士→騎士→パラディンに強化
-            const count = 4 + day * 2;
-            for (let i = 0; i < count; i++) {
-                const row = 3 + (i % 3);
-                const col = i % 8;
-                const types: HeroType[] =
-                    day >= 5 ? ['剣士', '重騎士', 'パラディン'] :
-                    day >= 3 ? ['剣士', '重騎士', '弓兵'] :
-                    ['剣士', '農夫', '弓兵'];
-                const type = types[Math.floor(Math.random() * types.length)];
-                enemies.push({ id: `e-${day}-${i}`, type, row, col, isElite: elite(), hpScale, atkScale });
-            }
-
-        } else if (pid === 'priest_loop') {
-            // 支援完結型: プリースト縦列＋前衛タンク、dayで前衛が強化
-            const priestCount = Math.min(2 + Math.floor(day / 2), 5);
-            for (let i = 0; i < priestCount; i++) enemies.push(unit(i, 'プリースト', 4 + (i % 3)));
-            const frontType: HeroType = day >= 5 ? 'パラディン' : day >= 3 ? '聖騎士' : '重騎士';
-            const knightCount = 1 + Math.floor(day / 2);
-            for (let i = 0; i < knightCount; i++) enemies.push(unit(100 + i, frontType, i % 3, elite()));
-
-        } else if (pid === 'phased') {
-            // 波状攻撃: タンク→中衛→後衛の3層、dayで各層が強化
-            const perLayer = 2 + Math.floor(day * 1.5);
-            const frontType: HeroType = day >= 4 ? 'パラディン' : '重騎士';
-            for (let i = 0; i < perLayer; i++) {
-                enemies.push(unit(i, frontType, i % 3, elite()));
-            }
-            const midType: HeroType = day >= 5 ? '剣士' : '農夫';
-            for (let i = 0; i < perLayer; i++) {
-                enemies.push(unit(perLayer + i, midType, 3 + (i % 3), elite()));
-            }
-            const backTypes: HeroType[] = day >= 4 ? ['魔法使い', '大魔道士'] : ['弓兵', '魔法使い'];
-            for (let i = 0; i < perLayer; i++) {
-                const t = backTypes[Math.floor(Math.random() * backTypes.length)];
-                enemies.push(unit(perLayer * 2 + i, t, 6 + (i % 2), elite()));
-            }
-
-        } else if (pid === 'speed_rush') {
-            // 奇襲隊: 高速ユニット大量展開、dayで剣士割合増加
-            const count = 5 + day * 3;
-            for (let i = 0; i < count; i++) {
-                const type: HeroType = day >= 4
-                    ? (Math.random() < 0.5 ? '剣士' : '農夫')
-                    : (Math.random() < 0.4 ? '剣士' : '農夫');
-                enemies.push(unit(i, type, i % 4, elite()));
-            }
-
-        } else {
-            // フォールバック
-            const count = 5 + day * 2;
-            const tankTypes: HeroType[] = day >= 4 ? ['重騎士', 'パラディン'] : day >= 2 ? ['剣士', '重騎士'] : ['村人', '農夫'];
-            const rangedTypes: HeroType[] = day >= 4 ? ['魔法使い', '大魔道士'] : day >= 3 ? ['弓兵', '魔法使い'] : day >= 2 ? ['弓兵'] : [];
-            for (let i = 0; i < count; i++) {
-                const isTank = rangedTypes.length === 0 || i < Math.ceil(count * 2 / 3);
-                const types = isTank ? tankTypes : rangedTypes;
-                const type = types[Math.floor(Math.random() * types.length)];
-                const FORMATION: Record<string, number> = { '重騎士': 0, 'パラディン': 0, '剣士': 1, '村人': 1, '農夫': 2, '弓兵': 5, '魔法使い': 6, '大魔道士': 7 };
-                enemies.push(unit(i, type, FORMATION[type] ?? 4, elite()));
-            }
+        const enemies: EnemyEntry[] = [];
+        for (let i = 0; i < count; i++) {
+            const type = pool[Math.floor(Math.random() * pool.length)];
+            const isElite = Math.random() < eliteChance;
+            const { row, col } = placeRandom();
+            enemies.push({ id: `e-${day}-${i}`, type, row, col, isElite, hpScale, atkScale });
         }
 
         setIncomingEnemies(enemies);

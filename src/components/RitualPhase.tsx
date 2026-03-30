@@ -42,7 +42,7 @@ const RitualPhase: React.FC = () => {
         setExpectedSummons,
         expectedSummons,
         pixiAppRef, pixiAppVersion,
-        generateWave, currentPattern, setPattern,
+        generateWave,
         equippedRecipes, addEquippedRecipe,
         ownedRelics, addRelic,
         money,
@@ -54,23 +54,9 @@ const RitualPhase: React.FC = () => {
     // ── ドラフト型定義 ──
     type DraftDifficulty = 'easy' | 'normal' | 'hard';
     interface DraftOption {
-        patternId: string;
-        patternName: string;
-        patternDesc: string;
         difficulty: DraftDifficulty;
         reward: { type: 'recipe'; recipe: Recipe } | { type: 'relic'; relic: Relic };
     }
-
-    const PATTERN_META: Record<string, { name: string; desc: string; difficulty: DraftDifficulty }> = {
-        swarm:       { name: '雪崩',       desc: '農夫・村人が大挙して押し寄せる',       difficulty: 'easy' },
-        speed_rush:  { name: '奇襲隊',     desc: '農夫・剣士が高速突撃',                 difficulty: 'easy' },
-        archer_wall: { name: '弓兵殲滅陣', desc: '後方から遠距離攻撃の猛攻',             difficulty: 'normal' },
-        turtle:      { name: '亀甲陣',     desc: '重騎士+プリーストの硬い布陣',          difficulty: 'normal' },
-        lane_rush:   { name: '縦割り突撃', desc: '中央レーンに兵力を集中投入',           difficulty: 'normal' },
-        phased:      { name: '波状攻撃',   desc: 'タンク→中衛→遠距離の3層攻勢',         difficulty: 'normal' },
-        priest_loop: { name: '支援完結型', desc: 'プリーストによる永続回復編成',          difficulty: 'hard' },
-        vip_guard:   { name: '精鋭護衛隊', desc: '聖騎士に守られた勇者が直接攻撃',       difficulty: 'hard' },
-    };
     const RECIPE_TIER: Record<string, 1 | 2 | 3> = {
         orc: 1, wisp: 1, skeleton: 1, cerberus: 1, lich: 1, archer: 2, necromancer: 3,
     };
@@ -101,14 +87,6 @@ const RitualPhase: React.FC = () => {
             setShowRecipeSelect(false);
         } else {
             // ドラフト選択肢を生成
-            const pick = (diff: DraftDifficulty): [string, typeof PATTERN_META[string]] => {
-                const candidates = Object.entries(PATTERN_META).filter(([, m]) => m.difficulty === diff);
-                const filtered = diff === 'hard' && currentDay < 4
-                    ? candidates.filter(([id]) => id !== 'vip_guard')
-                    : candidates;
-                const arr = filtered.length > 0 ? filtered : candidates;
-                return arr[Math.floor(Math.random() * arr.length)];
-            };
             const rewardForDiff = (diff: DraftDifficulty): DraftOption['reward'] => {
                 const unequipped = ALL_RECIPES.filter(r => !equippedRecipes.includes(r.id));
                 if (diff === 'easy') {
@@ -131,8 +109,7 @@ const RitualPhase: React.FC = () => {
                 return { type: 'recipe', recipe: fallback[Math.floor(Math.random() * fallback.length)] ?? ALL_RECIPES[0] };
             };
             const options: DraftOption[] = (['easy', 'normal', 'hard'] as DraftDifficulty[]).map(diff => {
-                const [patternId, meta] = pick(diff);
-                return { patternId, patternName: meta.name, patternDesc: meta.desc, difficulty: diff, reward: rewardForDiff(diff) };
+                return { difficulty: diff, reward: rewardForDiff(diff) };
             });
             setDraftOptions(options);
             setShowRecipeSelect(true);
@@ -1084,7 +1061,7 @@ const RitualPhase: React.FC = () => {
             addRelic(option.reward.relic.id);
             setPickedRecipeId('relic-picked');
         }
-        generateWave(currentDay, option.patternId);
+        generateWave(currentDay);
         setDraftPicked(true);
     };
 
@@ -1131,7 +1108,7 @@ const RitualPhase: React.FC = () => {
                                 transition: 'border-color 0.12s, opacity 0.12s',
                             }}
                         >
-                            {/* 難易度バッジ + 敵パターン名 */}
+                            {/* 難易度バッジ */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <div style={{
                                     background: col + '33', border: `1px solid ${col}`,
@@ -1141,12 +1118,7 @@ const RitualPhase: React.FC = () => {
                                 }}>
                                     {DIFF_LABEL[opt.difficulty]}
                                 </div>
-                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#ddbbff' }}>
-                                    {isPicked && '✓ '}{opt.patternName}
-                                </div>
-                            </div>
-                            <div style={{ fontSize: '9px', color: '#886699', lineHeight: 1.4 }}>
-                                {opt.patternDesc}
+                                {isPicked && <div style={{ fontSize: '12px', color: col }}>✓ 選択済み</div>}
                             </div>
 
                             {/* 区切り */}
@@ -1399,49 +1371,6 @@ const RitualPhase: React.FC = () => {
                 );
             })(), document.body)}
 
-            {/* ───── デバッグ: 敵軍パターン選択 ───── */}
-            {import.meta.env.DEV && ReactDOM.createPortal(
-                <div style={{
-                    position: 'fixed', bottom: 12, right: 12, zIndex: 9999,
-                    background: 'rgba(0,0,0,0.85)', border: '1px solid #444',
-                    borderRadius: '8px', padding: '8px 12px',
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    fontSize: '11px', color: '#aaa',
-                }}>
-                    <span style={{ color: '#ff8844', fontWeight: 'bold' }}>🛠 DEV</span>
-                    <span>敵軍:</span>
-                    <select
-                        value={currentPattern}
-                        onChange={e => setPattern(e.target.value)}
-                        style={{
-                            background: '#1a1a2e', color: '#ccc',
-                            border: '1px solid #555', borderRadius: '4px',
-                            padding: '2px 4px', fontSize: '11px', cursor: 'pointer',
-                        }}
-                    >
-                        <option value="random">ランダム（day依存）</option>
-                        <option value="turtle">① 亀甲陣</option>
-                        <option value="swarm">② 雪崩</option>
-                        <option value="archer_wall">③ 弓兵殲滅陣</option>
-                        <option value="vip_guard">④ 精鋭護衛隊（day4+）</option>
-                        <option value="lane_rush">⑤ 縦割り突撃</option>
-                        <option value="priest_loop">⑥ 支援完結型</option>
-                        <option value="phased">⑦ 波状攻撃</option>
-                        <option value="speed_rush">⑧ 奇襲隊</option>
-                    </select>
-                    <button
-                        onClick={() => generateWave(currentDay, currentPattern)}
-                        style={{
-                            background: '#2a1a3e', color: '#cc88ff',
-                            border: '1px solid #664488', borderRadius: '4px',
-                            padding: '2px 10px', fontSize: '11px', cursor: 'pointer',
-                        }}
-                    >
-                        適用
-                    </button>
-                </div>,
-                document.body
-            )}
 
             {/* ───── ポータル描画 ───── */}
             {panelSlot && ReactDOM.createPortal(leftPanel, panelSlot)}

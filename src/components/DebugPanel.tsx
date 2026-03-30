@@ -4,17 +4,6 @@ import { ROWS } from '../game/config';
 import type { HeroType } from '../game/entities';
 import { HERO_ROSTER } from '../game/entities';
 
-const WAVE_PATTERNS = [
-    { id: 'random', label: 'ランダム' },
-    { id: 'turtle', label: '亀甲陣' },
-    { id: 'swarm', label: '雪崩' },
-    { id: 'archer_wall', label: '弓兵殲滅' },
-    { id: 'vip_guard', label: '精鋭護衛' },
-    { id: 'lane_rush', label: '縦割り突撃' },
-    { id: 'priest_loop', label: '支援完結' },
-    { id: 'phased', label: '波状攻撃' },
-    { id: 'speed_rush', label: '奇襲隊' },
-];
 
 const PIECE_DEFS = [
     { type: 0, label: '🦴 骨', color: '#aaaaaa', border: '#888888' },
@@ -29,7 +18,6 @@ const DebugPanel: React.FC = () => {
     } = useGame();
 
     const [debugDay, setDebugDay] = useState(1);
-    const [patternIdx, setPatternIdx] = useState(0);
 
     const injectPieces = (type: number, count: number) => {
         for (let i = 0; i < count; i++) addPendingPuzzlePiece(type);
@@ -43,10 +31,6 @@ const DebugPanel: React.FC = () => {
             row: idx % ROWS,
             col: Math.floor(idx / ROWS) % 9,
         });
-    };
-
-    const handlePatternChange = (dir: -1 | 1) => {
-        setPatternIdx(i => (i + dir + WAVE_PATTERNS.length) % WAVE_PATTERNS.length);
     };
 
     // スタイル定数
@@ -140,21 +124,8 @@ const DebugPanel: React.FC = () => {
                         <span style={{ fontSize: '10px', color: '#666' }}>（HP倍率に影響）</span>
                     </div>
 
-                    {/* パターン選択 */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-                        <button style={{ ...smallBtn('#221144'), padding: '2px 8px', fontSize: '12px' }} onClick={() => handlePatternChange(-1)}>◀</button>
-                        <div style={{
-                            flex: 1, textAlign: 'center', fontSize: '11px',
-                            color: '#cc88ff', background: '#0d0820',
-                            border: '1px solid #3a1050', borderRadius: '3px', padding: '3px 4px',
-                        }}>
-                            {WAVE_PATTERNS[patternIdx].label}
-                        </div>
-                        <button style={{ ...smallBtn('#221144'), padding: '2px 8px', fontSize: '12px' }} onClick={() => handlePatternChange(1)}>▶</button>
-                    </div>
-
                     <button
-                        onClick={() => generateWave(debugDay, WAVE_PATTERNS[patternIdx].id)}
+                        onClick={() => generateWave(debugDay)}
                         style={{
                             width: '100%', background: 'linear-gradient(to bottom, #440066, #220033)',
                             color: '#cc88ff', border: '1px solid #660099', borderRadius: '4px',
@@ -162,7 +133,7 @@ const DebugPanel: React.FC = () => {
                             fontWeight: 'bold',
                         }}
                     >
-                        🌊 パターン生成
+                        🌊 Wave生成
                     </button>
 
                     {/* 個別追加 */}
