@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useGame } from '../contexts/GameContext';
-import { BOARD_WIDTH } from '../game/config';
 import DefensePhase from './DefensePhase';
 import RitualPhase from './RitualPhase';
 import DebugPanel from './DebugPanel';
@@ -78,11 +77,11 @@ const BattlePhase: React.FC = () => {
                         <DefensePhase onStateChange={setUiState} />
                     </div>
 
-                    {/* 儀式フェーズ：コンボ演出オーバーレイ */}
+                    {/* 儀式フェーズ：コンボ演出オーバーレイ + 敵陣情報 */}
                     {phase === 'RITUAL' && (
                         <div style={{
                             position: 'absolute', left: 0, top: 0,
-                            width: `${BOARD_WIDTH}px`, height: '100%',
+                            width: '100%', height: '100%',
                             zIndex: 10, pointerEvents: 'none'
                         }}>
                             <RitualPhase />

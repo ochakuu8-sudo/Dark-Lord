@@ -6,7 +6,7 @@ import { useGame } from '../contexts/GameContext';
 import {
     COLORS, PIECE_EMOJIS, ALL_RECIPES,
     ROWS, COLS, BLOCK_SIZE, RECIPE_EMOJIS, MATERIAL_BG_COLORS, COLOR_HEX,
-    RARITY_COLOR, RARITY_LABEL, type Recipe
+    RARITY_COLOR, RARITY_LABEL, BOARD_WIDTH, ENEMY_BOARD_WIDTH, type Recipe
 } from '../game/config';
 import { UNIT_STATS, PASSIVE_DESCRIPTIONS } from '../game/entities';
 import type { SummonedUnit } from '../contexts/GameContext';
@@ -85,7 +85,14 @@ const RitualPhase: React.FC = () => {
     );
     const gridRef = useRef<(BlockData | null)[][]>(grid);
     const [isBestiaryOpen, setIsBestiaryOpen] = useState(false);
+    const [previewIdx, setPreviewIdx] = useState(0);
 
+    // バトル選択肢が生成されたら先頭を自動選択（敵陣に即表示）
+    useEffect(() => {
+        if (battleOptions.length === 0) return;
+        setPreviewIdx(0);
+        selectBattleOption(battleOptions[0]);
+    }, [battleOptions]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const [comboCount, setComboCount] = useState(0);
     const [comboKey, setComboKey] = useState(0); // アニメーション再トリガー用
@@ -946,7 +953,6 @@ const RitualPhase: React.FC = () => {
             </button>
             {/* 戦闘へ */}
             <button
-                disabled={!selectedBattleOption}
                 onClick={() => {
                     handleSummon((summons) => {
                         if (summons.length > 0) addSummonedMonsters(summons);
@@ -954,7 +960,7 @@ const RitualPhase: React.FC = () => {
                         setPhase('BATTLE');
                     });
                 }}
-                style={{ flexShrink: 0, padding: '10px', background: 'linear-gradient(135deg, #4a0a0a, #7a1a1a)', color: '#ffaaaa', border: '1px solid #882222', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: !selectedBattleOption ? 'not-allowed' : 'pointer', opacity: !selectedBattleOption ? 0.5 : 1 }}>
+                style={{ flexShrink: 0, padding: '10px', background: 'linear-gradient(135deg, #4a0a0a, #7a1a1a)', color: '#ffaaaa', border: '1px solid #882222', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
                 ⚔️ 戦闘へ
             </button>
         </div>
@@ -992,116 +998,131 @@ const RitualPhase: React.FC = () => {
         </div>
     );
 
-    // ───── ドラフト選択オーバーレイ ─────
+    // ── 敵陣情報インラインオーバーレイ ──────────────────────────────
+    const currentOpt = battleOptions[previewIdx] ?? null;
+    const currentOptRecipe = currentOpt ? ALL_RECIPES.find(r => r.id === currentOpt.recipeId) : null;
+    const currentOptBossStats = currentOpt ? UNIT_STATS[currentOpt.bossType] : null;
+    const currentOptCol = currentOpt ? DIFF_COLOR[currentOpt.difficulty] : '#888';
 
-
-    // ── バトル選択オーバーレイ ──────────────────────────────────────
-    const battleSelectOverlay = !selectedBattleOption && battleOptions.length > 0 && (
+    const enemyTerritoryOverlay = battleOptions.length > 0 && currentOpt && (
         <div style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
-            background: 'rgba(4, 2, 12, 0.97)',
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'flex-start',
-            overflowY: 'auto', padding: '12px 10px', gap: '8px',
-            boxSizing: 'border-box',
+            position: 'absolute', left: BOARD_WIDTH, top: 0,
+            width: ENEMY_BOARD_WIDTH, height: '100%',
+            pointerEvents: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-            {/* ヘッダー */}
-            <div style={{ textAlign: 'center', flexShrink: 0 }}>
-                <div style={{ fontSize: '9px', color: '#554466', letterSpacing: '3px' }}>DAY {currentDay}</div>
-                <div style={{ fontSize: '15px', color: '#ccaaff', fontWeight: 'bold', letterSpacing: '2px' }}>⚔️ 出撃先を選択</div>
-                <div style={{ fontSize: '10px', color: '#554466', marginTop: '2px' }}>雑魚撃破でピース素材、ボス撃破でレシピを獲得</div>
-            </div>
+            {/* 左矢印 */}
+            <button
+                style={{
+                    position: 'absolute', left: 4, top: '50%', transform: 'translateY(-50%)',
+                    background: 'rgba(16,8,32,0.88)', border: '1px solid #553388',
+                    color: '#cc88ff', fontSize: 22, width: 36, height: 64,
+                    borderRadius: 6, cursor: 'pointer', pointerEvents: 'auto',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'background 0.12s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(40,16,72,0.95)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(16,8,32,0.88)'; }}
+                onClick={() => {
+                    const newIdx = (previewIdx - 1 + battleOptions.length) % battleOptions.length;
+                    setPreviewIdx(newIdx);
+                    selectBattleOption(battleOptions[newIdx]);
+                }}
+            >◀</button>
 
-            {/* 3択カード */}
-            <div style={{ display: 'flex', gap: '8px', width: '100%', maxWidth: '900px', flexShrink: 0 }}>
-                {battleOptions.map((opt) => {
-                    const col = DIFF_COLOR[opt.difficulty];
-                    const recipe = ALL_RECIPES.find(r => r.id === opt.recipeId);
-                    const bossStats = UNIT_STATS[opt.bossType];
-                    return (
-                        <div key={opt.id}
-                            onClick={() => selectBattleOption(opt)}
-                            style={{
-                                flex: 1, background: '#0e0820',
-                                border: `2px solid ${col}88`,
-                                borderRadius: '10px', padding: '10px',
-                                display: 'flex', flexDirection: 'column', gap: '6px',
-                                cursor: 'pointer', transition: 'border-color 0.12s',
-                            }}
-                            onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = col}
-                            onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = col + '88'}
-                        >
-                            {/* 難易度 + タイトル */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ color: col, fontSize: '12px', letterSpacing: '1px', flexShrink: 0 }}>
-                                    {DIFF_STARS[opt.difficulty]}
-                                </span>
-                                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ddbbff' }}>{opt.label}</span>
+            {/* 情報パネル */}
+            <div style={{
+                background: 'rgba(6,3,16,0.92)',
+                border: `2px solid ${currentOptCol}99`,
+                borderRadius: 10,
+                padding: '10px 14px',
+                width: 300,
+                display: 'flex', flexDirection: 'column', gap: 6,
+                pointerEvents: 'auto',
+            }}>
+                {/* ヘッダー */}
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 9, color: '#443355', letterSpacing: '3px' }}>
+                        DAY {currentDay} &nbsp;—&nbsp; {previewIdx + 1} / {battleOptions.length}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 'bold', color: '#ddbbff', marginTop: 2 }}>{currentOpt.label}</div>
+                    <div style={{ color: currentOptCol, fontSize: 11, letterSpacing: 1 }}>{DIFF_STARS[currentOpt.difficulty]}</div>
+                </div>
+
+                {/* 雑魚構成 */}
+                <div style={{ borderTop: '1px solid #241040', paddingTop: 5 }}>
+                    <div style={{ fontSize: 9, color: '#7755aa', marginBottom: 3 }}>雑魚</div>
+                    {currentOpt.gruntGroups.map((g, i) => (
+                        <div key={i} style={{ fontSize: 10, color: '#ccaacc' }}>{g.type} ×{g.count}</div>
+                    ))}
+                </div>
+
+                {/* ボス */}
+                <div style={{ borderTop: '1px solid #241040', paddingTop: 5 }}>
+                    <div style={{ fontSize: 9, color: '#ff6622', marginBottom: 3 }}>👑 ボス</div>
+                    <div style={{ fontSize: 11, fontWeight: 'bold', color: '#ff9944' }}>{currentOpt.bossType}</div>
+                    {currentOptBossStats && (
+                        <div style={{ fontSize: 8, color: '#886644', display: 'flex', gap: 6, marginTop: 2 }}>
+                            <span>❤️ {(currentOptBossStats.maxHp! * 6).toLocaleString()}</span>
+                            <span>⚔️ {(currentOptBossStats.attack! * 3).toLocaleString()}</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* 報酬 */}
+                <div style={{ borderTop: '1px solid #241040', paddingTop: 5 }}>
+                    <div style={{ fontSize: 9, color: '#7755aa', marginBottom: 4 }}>報酬</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                        <span style={{ fontSize: 14 }}>{PIECE_EMOJIS[currentOpt.pieceType]}</span>
+                        <span style={{ fontSize: 10, color: COLOR_HEX[currentOpt.pieceType] }}>
+                            {MATERIAL_NAMES_UI[currentOpt.pieceType]}ピース（雑魚1体1個）
+                        </span>
+                    </div>
+                    {currentOptRecipe && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 12 }}>📜</span>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 10, fontWeight: 'bold', color: '#ffddaa' }}>{currentOptRecipe.name}</div>
+                                <div style={{ fontSize: 8, color: RARITY_COLOR[currentOptRecipe.rarity] }}>{RARITY_LABEL[currentOptRecipe.rarity]}</div>
                             </div>
-
-                            {/* 雑魚構成 */}
-                            <div style={{ borderTop: '1px solid #2a1040', paddingTop: '5px' }}>
-                                <div style={{ fontSize: '9px', color: '#7755aa', marginBottom: '3px' }}>雑魚</div>
-                                {opt.gruntGroups.map((g, i) => (
-                                    <div key={i} style={{ fontSize: '10px', color: '#ccaacc' }}>
-                                        {g.type} ×{g.count}
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* ボス */}
-                            <div style={{ borderTop: '1px solid #2a1040', paddingTop: '5px' }}>
-                                <div style={{ fontSize: '9px', color: '#ff6622', marginBottom: '3px' }}>👑 ボス</div>
-                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#ff9944' }}>{opt.bossType}</div>
-                                {bossStats && (
-                                    <div style={{ fontSize: '8px', color: '#886644', display: 'flex', gap: '5px', marginTop: '2px' }}>
-                                        <span>❤️{(bossStats.maxHp! * 6).toLocaleString()}</span>
-                                        <span>⚔️{(bossStats.attack! * 3).toLocaleString()}</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* 報酬 */}
-                            <div style={{ borderTop: '1px solid #2a1040', paddingTop: '5px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <div style={{ fontSize: '9px', color: '#7755aa' }}>報酬</div>
-                                {/* ピース素材 */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <span style={{ fontSize: '14px' }}>{PIECE_EMOJIS[opt.pieceType]}</span>
-                                    <span style={{ fontSize: '10px', color: COLOR_HEX[opt.pieceType] }}>
-                                        {MATERIAL_NAMES_UI[opt.pieceType]}ピース（雑魚1体につき1個）
-                                    </span>
-                                </div>
-                                {/* レシピ */}
-                                {recipe && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <span style={{ fontSize: '12px' }}>📜</span>
-                                        <div>
-                                            <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#ffddaa' }}>{recipe.name}</div>
-                                            <div style={{ fontSize: '8px', color: RARITY_COLOR[recipe.rarity] }}>{RARITY_LABEL[recipe.rarity]}</div>
-                                        </div>
-                                        {/* レシピパターン */}
-                                        <div style={{ marginLeft: 'auto', display: 'grid', gap: '1px', gridTemplateColumns: `repeat(${recipe.pattern[0]?.length ?? 3}, 12px)`, flexShrink: 0 }}>
-                                            {recipe.pattern.map((row, ri) => row.map((val, ci) => (
-                                                <div key={`${ri}-${ci}`} style={{
-                                                    width: 12, height: 12, borderRadius: 2,
-                                                    background: val === -1 ? 'transparent' : val === 9 ? '#333' : COLOR_HEX[val] ?? '#333',
-                                                    border: val !== -1 ? '1px solid #444' : 'none',
-                                                }} />
-                                            )))}
-                                        </div>
-                                    </div>
-                                )}
+                            <div style={{ display: 'grid', gap: 1, gridTemplateColumns: `repeat(${currentOptRecipe.pattern[0]?.length ?? 3}, 12px)`, flexShrink: 0 }}>
+                                {currentOptRecipe.pattern.map((row, ri) => row.map((val, ci) => (
+                                    <div key={`${ri}-${ci}`} style={{
+                                        width: 12, height: 12, borderRadius: 2,
+                                        background: val === -1 ? 'transparent' : val === 9 ? '#333' : COLOR_HEX[val] ?? '#333',
+                                        border: val !== -1 ? '1px solid #444' : 'none',
+                                    }} />
+                                )))}
                             </div>
                         </div>
-                    );
-                })}
+                    )}
+                </div>
             </div>
+
+            {/* 右矢印 */}
+            <button
+                style={{
+                    position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+                    background: 'rgba(16,8,32,0.88)', border: '1px solid #553388',
+                    color: '#cc88ff', fontSize: 22, width: 36, height: 64,
+                    borderRadius: 6, cursor: 'pointer', pointerEvents: 'auto',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'background 0.12s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(40,16,72,0.95)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(16,8,32,0.88)'; }}
+                onClick={() => {
+                    const newIdx = (previewIdx + 1) % battleOptions.length;
+                    setPreviewIdx(newIdx);
+                    selectBattleOption(battleOptions[newIdx]);
+                }}
+            >▶</button>
         </div>
     );
 
     return (
         <>
-            {battleSelectOverlay && ReactDOM.createPortal(battleSelectOverlay, document.body)}
+            {enemyTerritoryOverlay}
             {/* ───── 盤面オーバーレイ（フラッシュ・コンボ演出） ───── */}
             <div style={{ width: curWidth, height: '100%', position: 'relative', pointerEvents: 'none' }}
                 onClick={() => setPinnedPiece(null)}>
