@@ -31,7 +31,7 @@ export const ALL_RECIPES: Recipe[] = [
     // COMMON: 単色形のみ  9形状 × 3素材 = 27種
     //
     //  形一覧:
-    //   I3  縦3直線     → ウィスプ
+    //   I3  縦3直線     → ゴブリン（初期固定）
     //   L3  L字(3)      → スケルトン
     //   I4  縦4直線     → アーチャー
     //   O4  2×2正方形   → オーク
@@ -42,10 +42,10 @@ export const ALL_RECIPES: Recipe[] = [
     //   Z4  Zテトロミノ → バンシー
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    // ── I3: 縦3直線 ── ウィスプ
+    // ── I3: 縦3直線 ── ゴブリン（初期固定レシピ）
     {
-        id: 'wisp_bone',
-        name: 'スパーク',
+        id: 'goblin_bone',
+        name: 'スラッシャー',
         rarity: 'common',
         pattern: [
             [0], // 骨
@@ -55,8 +55,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 1,
     },
     {
-        id: 'wisp_meat',
-        name: 'メデック',
+        id: 'goblin_meat',
+        name: 'ブルート',
         rarity: 'common',
         pattern: [
             [1], // 肉
@@ -66,8 +66,8 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 1,
     },
     {
-        id: 'wisp_spirit',
-        name: 'カミカゼ',
+        id: 'goblin_spirit',
+        name: 'グレネーダー',
         rarity: 'common',
         pattern: [
             [2], // 霊
@@ -246,39 +246,18 @@ export const ALL_RECIPES: Recipe[] = [
         reward: 2,
     },
 
-    // ── J4: Jテトロミノ ── ゴブリン
+    // ── 対角3: 斜め3連 ── ウィスプ（ワイルドカード＋resultMap）
     {
-        id: 'goblin_bone',
-        name: 'ポイズナー',
-        rarity: 'common',
+        id: 'wisp',
+        name: 'ウィスプ',
+        rarity: 'rare',
         pattern: [
-            [-1, 0], // ·  骨
-            [-1, 0], // ·  骨
-            [ 0, 0], // 骨 骨
+            [ 9, -1, -1], // ？ ·  ·
+            [-1,  9, -1], // ·  ？ ·
+            [-1, -1,  9], // ·  ·  ？
         ],
         reward: 2,
-    },
-    {
-        id: 'goblin_meat',
-        name: 'ウォークライ',
-        rarity: 'common',
-        pattern: [
-            [-1, 1], // ·  肉
-            [-1, 1], // ·  肉
-            [ 1, 1], // 肉 肉
-        ],
-        reward: 2,
-    },
-    {
-        id: 'goblin_spirit',
-        name: 'ドラム',
-        rarity: 'common',
-        pattern: [
-            [-1, 2], // ·  霊
-            [-1, 2], // ·  霊
-            [ 2, 2], // 霊 霊
-        ],
-        reward: 2,
+        resultMap: { 0: 'wisp_bone', 1: 'wisp_meat', 2: 'wisp_spirit' },
     },
 
     // ── S4: Sテトロミノ ── インプ
@@ -435,6 +414,7 @@ export const RECIPE_EMOJIS: Record<string, string> = {
     lich_bone:       '🧙',
     lich_meat:       '🧙',
     lich_spirit:     '🧙',
+    wisp:            '✨',
     wisp_bone:       '✨',
     wisp_meat:       '✨',
     wisp_spirit:     '✨',

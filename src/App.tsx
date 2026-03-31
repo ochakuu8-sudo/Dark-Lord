@@ -2,32 +2,17 @@ import React from 'react';
 import { GameProvider, useGame } from './contexts/GameContext';
 import BattlePhase from './components/BattlePhase';
 import ResponsiveWrapper from './components/ResponsiveWrapper';
-import { ALL_RECIPES, type Recipe } from './game/config';
 import './App.css';
-
-// コモンレシピを素材種別ごとに分類
-const getMainMaterial = (recipe: Recipe): 0 | 1 | 2 => {
-  const counts = [0, 0, 0];
-  recipe.pattern.flat().forEach(v => { if (v >= 0 && v <= 2) counts[v]++; });
-  return counts.indexOf(Math.max(...counts)) as 0 | 1 | 2;
-};
-
-// コモンレシピのうち3ピースのもの（I3・L3形）だけを抽出
-const COMMON_3PIECE_RECIPES = ALL_RECIPES.filter(r =>
-  r.rarity === 'common' && r.pattern.flat().filter(v => v >= 0 && v <= 2).length === 3
-);
 
 const GameController: React.FC = () => {
   const { phase, setPhase, resetGame, isDebugMode, setIsDebugMode, unlockRecipe, addEquippedRecipe } = useGame();
-  // 骨/肉/霊から各1枚ランダムに選んで即装備
+
+  // ゴブリン3種を固定初期レシピとして装備
   const startNormalGame = () => {
     setIsDebugMode(false);
-    const byMat: Record<number, Recipe[]> = { 0: [], 1: [], 2: [] };
-    COMMON_3PIECE_RECIPES.forEach(r => byMat[getMainMaterial(r)].push(r));
-    ([0, 1, 2] as const).forEach(mat => {
-      const pool = byMat[mat];
-      const recipe = pool[Math.floor(Math.random() * pool.length)];
-      if (recipe) { unlockRecipe(recipe.id); addEquippedRecipe(recipe.id); }
+    ['goblin_bone', 'goblin_meat', 'goblin_spirit'].forEach(id => {
+      unlockRecipe(id);
+      addEquippedRecipe(id);
     });
     setPhase('RITUAL');
   };
@@ -40,7 +25,7 @@ const GameController: React.FC = () => {
       'archer_bone', 'archer_meat', 'archer_spirit',
       'cerberus_bone', 'cerberus_meat', 'cerberus_spirit',
       'lich_bone', 'lich_meat', 'lich_spirit',
-      'wisp_bone', 'wisp_meat', 'wisp_spirit',
+      'wisp',
       'necromancer', 'minotaur', 'ghoul',
     ].forEach(id => {
       unlockRecipe(id);

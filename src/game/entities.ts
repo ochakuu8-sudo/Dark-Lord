@@ -79,11 +79,11 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'lich_meat':   { maxHp: 600, attack: 88,  range: 200, speed: DEMON_SPEED * 0.8,  maxCooldown: 58,  color: 0xffaaaa, materialType: 1, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'HEAL_AURA', value: 6, range: 120 }] },
     'lich_spirit': { maxHp: 260, attack: 105, range: 400, speed: DEMON_SPEED * 0.9,  maxCooldown: 75,  color: 0xaa55ff, materialType: 2, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'AOE_ON_HIT', value: 40, range: 80 }] },
 
-    // --- Goblin Derivations (コモン・高速近接・サポート付き)
-    // DPS目安: bone≈18+毒地, meat≈36+攻撃バフ, spirit≈22+オーラ回復
-    'goblin_bone':   { maxHp: 80,  attack: 12, range: 40, speed: DEMON_SPEED * 1.2, maxCooldown: 40, color: 0xaaaaaa, materialType: 0, attackType: 'melee', size: 12, accuracy: 1, passiveAbilities: [{ type: 'AREA_DOT', value: 15, range: 40 }] },
-    'goblin_meat':   { maxHp: 120, attack: 18, range: 40, speed: DEMON_SPEED * 1.4, maxCooldown: 30, color: 0xff8888, materialType: 1, attackType: 'melee', size: 12, accuracy: 1, passiveAbilities: [{ type: 'ATK_BUFF', value: 1.2, range: 80 }] },
-    'goblin_spirit': { maxHp: 60,  attack: 9,  range: 80, speed: DEMON_SPEED * 1.5, maxCooldown: 25, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 10, accuracy: 1, passiveAbilities: [{ type: 'AURA_REGEN', value: 3, range: 80 }] },
+    // --- Goblin Derivations (コモン・初期スターター)
+    // 骨: 単体高火力  肉: 高HP耐久  霊: 範囲攻撃低火力
+    'goblin_bone':   { maxHp: 110,  attack: 55, range: 40, speed: DEMON_SPEED,        maxCooldown: 42, color: 0xbbaa88, materialType: 0, attackType: 'melee',  size: 14, accuracy: 1 },
+    'goblin_meat':   { maxHp: 400,  attack: 18, range: 40, speed: DEMON_SPEED * 0.85, maxCooldown: 50, color: 0xff9966, materialType: 1, attackType: 'melee',  size: 16, accuracy: 1 },
+    'goblin_spirit': { maxHp: 80,   attack: 18, range: 100, speed: DEMON_SPEED,       maxCooldown: 50, color: 0xaa88ff, materialType: 2, attackType: 'ranged', size: 11, accuracy: 1, passiveAbilities: [{ type: 'INSTANT_AOE', value: 18, range: 80 }] },
 
     // --- Imp Derivations (コモン・中距離支援)
     // DPS目安: bone≈40+ピース回収, meat≈ヒール, spirit≈55+死体爆発
