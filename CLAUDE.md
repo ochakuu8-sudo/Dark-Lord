@@ -30,7 +30,7 @@ Dark-Lord/
 │   │   ├── RitualPhase.tsx       # Match-3 puzzle grid, recipe matching (1278 lines)
 │   │   └── UnitSprite.tsx        # Sprite rendering component (120 lines)
 │   ├── contexts/
-│   │   └── GameContext.tsx       # Global game state via React Context (495 lines)
+│   │   └── GameContext.tsx       # Global game state via React Context (489 lines)
 │   ├── game/
 │   │   ├── config.ts             # All game data: recipes, units, relics, colors
 │   │   └── entities.ts           # TypeScript types: EntityState, PassiveAbility, stats
@@ -143,23 +143,34 @@ Global game state lives in `src/contexts/GameContext.tsx`. It manages:
 
 ### Recipe System (src/game/config.ts)
 
-30 total recipes:
-- **27 Common** (9 Tetromino-like shapes × 3 materials) → summons: Wisp, Skeleton, Archer, Orc, Lich, Cerberus, Goblin, Imp, Banshee
-- **3 Rare** (special shapes with wildcard slots) → summons: Necromancer, Minotaur, Ghoul
+12 recipe templates (each handles 3 material variants via `resultMap: { 0: '_bone', 1: '_meat', 2: '_spirit' }`):
+- **8 Common** (single-color wildcard shapes) → summons: Goblin (I3), Skeleton (L3), Archer (I4), Orc (O4), Lich (T4), Cerberus (L4), Imp (S4), Banshee (Z4)
+- **4 Rare** (special shapes with wildcard/mixed slots) → summons: Wisp (diagonal 3), Necromancer, Minotaur, Ghoul
 
 Shapes use a 9×9 grid system (`ROWS`, `COLS = 9`, block size `54px`).
+Pattern values: `0`=骨, `1`=肉, `2`=霊, `9`=wildcard (❓), `-1`=empty.
 
 ### Units (src/game/entities.ts + src/game/config.ts)
 
-- **23 demon unit variants** each with: HP, ATK, range, speed, cooldown, size, color, passive abilities
+- **24 demon unit variants** (8 common × 3 materials + 4 rare × 3 materials) each with: HP, ATK, range, speed, cooldown, size, color, passive abilities
+- **1 token unit**: `zombie` (spawned by abilities, not by recipe)
 - **11 hero types** (enemies)
 - All demons use base speed modifier `DEMON_SPEED = 0.8`
 - Unit stats are documented in `docs/output/unit_stats.md` with DPS calculations
 
 ### Passive Ability System
 
-30+ ability types defined in `entities.ts`. Examples:
-- `REFLECT`, `LIFESTEAL`, `CHARGE`, `TELEPORT`
+36 ability types defined in `entities.ts` (`PassiveAbility` union + `PASSIVE_DESCRIPTIONS` map):
+
+```
+REFLECT, AURA_REGEN, PIERCING, PIECE_RETURN, CLONE, AREA_DOT, ATK_BUFF, HEAL_SHOT,
+SUMMON, CORPSE_EXPLOSION, PROXIMITY_EXPLOSION, INSTANT_AOE, BERSERK, SELF_REGEN,
+LIFESTEAL, POISON, DOUBLE_SPAWN, ON_DEATH_SPAWN, UNTARGETABLE, RAPID_FIRE,
+MACHINE_GUN, BOUNCE_SHOT, HEAL_AURA, AOE_ON_HIT, FRONTAL_AOE, EXPLODE_PROJECTILE,
+EXPLODE_HEAL, CHARGE_EXPLOSION, ALLY_DEATH_EXPLOSION, ENEMY_DEATH_SPAWN,
+CHARGE, KNOCKBACK, RANGED_RESIST, TARGET_LOWEST_HP, MOVE_REGEN, STEALTH
+```
+
 - Each ability has typed parameters: `{ value?, range?, cooldown? }`
 - Abilities are cached per entity on spawn (see `passiveCache` pattern)
 
@@ -185,7 +196,7 @@ Shapes use a 9×9 grid system (`ROWS`, `COLS = 9`, block size `54px`).
 
 ### Adding a New Unit
 
-1. Define stats in `src/game/entities.ts` (add to `unitStats` record)
+1. Define stats in `src/game/entities.ts` (add to `UNIT_STATS` record)
 2. Add recipes in `src/game/config.ts` (common or rare recipe entry)
 3. Add ability descriptions to `BestiaryModal.tsx` if using new passive abilities
 4. Update `docs/output/unit_stats.md` with balance notes
@@ -193,8 +204,8 @@ Shapes use a 9×9 grid system (`ROWS`, `COLS = 9`, block size `54px`).
 ### Adding a New Passive Ability
 
 1. Add the type to the `PassiveAbility` union in `entities.ts`
-2. Implement the ability logic in `DefensePhase.tsx` (check existing ability handlers for pattern)
-3. Add a description string in `BestiaryModal.tsx`
+2. Add a description string to `PASSIVE_DESCRIPTIONS` in `entities.ts`
+3. Implement the ability logic in `DefensePhase.tsx` (check existing ability handlers for pattern)
 
 ### Modifying Game Balance
 
@@ -216,3 +227,14 @@ Toggle debug mode via the game UI or `GameContext`. The `DebugPanel.tsx` compone
 - `node_modules/` — dependencies (gitignored)
 
 The `docs/output/unit_stats.md` file is auto-generated (last updated 2026-03-28) and reflects the current balance state.
+
+---
+
+## Relic Reference (src/game/config.ts)
+
+| ID | Japanese Name | Price | Effect |
+|----|---------------|-------|--------|
+| `giant_heart` | 巨人の心臓 | 80 | All demon HP ×2, move speed −30% |
+| `fire_crown` | 炎の王冠 | 80 | Red unit ATK ×1.5, others ×0.8 |
+| `mana_prism` | マナの水晶 | 60 | Base HP ÷2, gain magic effects |
+| `necromancer_guide` | 死霊術師の手引き | 100 | 25% chance to spawn skeleton on enemy death |
