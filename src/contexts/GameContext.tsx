@@ -364,8 +364,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // ── バトル選択肢生成 ──────────────────────────────────────────
     const generateBattleOptions = React.useCallback((day: number) => {
-        const materialSuffix = ['bone', 'meat', 'spirit'] as const;
-
         // ピース種別をシャッフル（毎回異なる組み合わせ）
         const pieceTypes: (0 | 1 | 2)[] = [0, 1, 2];
         for (let i = 2; i > 0; i--) {
@@ -373,14 +371,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             [pieceTypes[i], pieceTypes[j]] = [pieceTypes[j], pieceTypes[i]];
         }
 
-        const pickRecipe = (pt: 0 | 1 | 2): string => {
-            const suffix = materialSuffix[pt];
-            const cands = ALL_RECIPES.filter(r =>
-                r.id.endsWith(`_${suffix}`) && !equippedRecipes.includes(r.id)
-            );
+        const pickRecipe = (): string => {
+            const cands = ALL_RECIPES.filter(r => !equippedRecipes.includes(r.id));
             if (cands.length > 0) return cands[Math.floor(Math.random() * cands.length)].id;
-            const any = ALL_RECIPES.filter(r => !equippedRecipes.includes(r.id));
-            return (any[0] || ALL_RECIPES[0]).id;
+            return ALL_RECIPES[0].id;
         };
 
         const boss1: HeroType = day >= 7 ? '聖騎士' : '剣士';
@@ -398,7 +392,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     { type: '農夫', count: Math.max(2, Math.ceil(c1 * 0.6)) },
                     { type: '村人', count: Math.max(1, Math.floor(c1 * 0.4)) },
                 ],
-                bossType: boss1, pieceType: pieceTypes[0], recipeId: pickRecipe(pieceTypes[0]),
+                bossType: boss1, pieceType: pieceTypes[0], recipeId: pickRecipe(),
             },
             {
                 id: `opt-${day}-1`, label: '国境の守備隊', difficulty: 2,
@@ -406,7 +400,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     { type: '弓兵', count: Math.max(2, Math.ceil(c2 * 0.6)) },
                     { type: '剣士', count: Math.max(1, Math.floor(c2 * 0.4)) },
                 ],
-                bossType: boss2, pieceType: pieceTypes[1], recipeId: pickRecipe(pieceTypes[1]),
+                bossType: boss2, pieceType: pieceTypes[1], recipeId: pickRecipe(),
             },
             {
                 id: `opt-${day}-2`, label: '王国精鋭部隊', difficulty: 3,
@@ -414,7 +408,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     { type: '魔法使い', count: Math.max(2, Math.ceil(c3 * 0.5)) },
                     { type: '重騎士',   count: Math.max(1, Math.floor(c3 * 0.3)) },
                 ],
-                bossType: boss3, pieceType: pieceTypes[2], recipeId: pickRecipe(pieceTypes[2]),
+                bossType: boss3, pieceType: pieceTypes[2], recipeId: pickRecipe(),
             },
         ];
 
