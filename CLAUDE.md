@@ -144,8 +144,8 @@ Global game state lives in `src/contexts/GameContext.tsx`. It manages:
 ### Recipe System (src/game/config.ts)
 
 12 recipe templates (each handles 3 material variants via `resultMap: { 0: '_bone', 1: '_meat', 2: '_spirit' }`):
-- **8 Common** (single-color wildcard shapes) → summons: Goblin (I3), Skeleton (L3), Archer (I4), Orc (O4), Lich (T4), Cerberus (L4), Imp (S4), Banshee (Z4)
-- **4 Rare** (special shapes with wildcard/mixed slots) → summons: Wisp (diagonal 3), Necromancer, Minotaur, Ghoul
+- **9 Common** (wildcard shapes) → summons: Goblin (I3), Skeleton (L3), Archer (I4), Orc (O4), Lich (T4), Cerberus (L4), Wisp (diagonal 3), Imp (S4), Banshee (Z4)
+- **3 Rare** (mixed-material patterns with wildcard slot) → summons: Necromancer, Minotaur, Ghoul
 
 Shapes use a 9×9 grid system (`ROWS`, `COLS = 9`, block size `54px`).
 Pattern values: `0`=骨, `1`=肉, `2`=霊, `9`=wildcard (❓), `-1`=empty.

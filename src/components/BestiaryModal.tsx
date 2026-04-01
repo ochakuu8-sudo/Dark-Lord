@@ -213,17 +213,20 @@ const BestiaryModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
                                     color="#aaaaaa"
                                 />
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                                    {commonRecipes.map(recipe => {
-                                        const matIdx = (recipe.id.endsWith('_bone') ? 0 : recipe.id.endsWith('_meat') ? 1 : 2);
-                                        return (
-                                            <UnitCard
-                                                key={recipe.id}
-                                                recipe={recipe}
-                                                unitId={recipe.id}
-                                                matIdx={matIdx}
-                                            />
-                                        );
-                                    })}
+                                    {commonRecipes.map(recipe =>
+                                        ([0, 1, 2] as const).map(matIdx => {
+                                            const unitId = recipe.resultMap?.[matIdx];
+                                            if (!unitId) return null;
+                                            return (
+                                                <UnitCard
+                                                    key={unitId}
+                                                    recipe={recipe}
+                                                    unitId={unitId}
+                                                    matIdx={matIdx}
+                                                />
+                                            );
+                                        })
+                                    )}
                                 </div>
                             </div>
 

@@ -128,7 +128,7 @@ export const ALL_RECIPES: Recipe[] = [
     {
         id: 'wisp',
         name: 'ウィスプ',
-        rarity: 'rare',
+        rarity: 'common',
         pattern: [
             [ 9, -1, -1], // ？ ·  ·
             [-1,  9, -1], // ·  ？ ·
