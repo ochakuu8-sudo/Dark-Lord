@@ -7,7 +7,8 @@ export interface PassiveAbility {
         'EXPLODE_PROJECTILE' | 'EXPLODE_HEAL' | 'CHARGE_EXPLOSION' |
         'ALLY_DEATH_EXPLOSION' | 'ENEMY_DEATH_SPAWN' |
         'CHARGE' | 'KNOCKBACK' | 'RANGED_RESIST' |
-        'TARGET_LOWEST_HP' | 'MOVE_REGEN' | 'STEALTH';
+        'TARGET_LOWEST_HP' | 'MOVE_REGEN' | 'STEALTH' |
+        'ON_DEATH_STUN' | 'EVADE' | 'ENEMY_DEATH_HEAL' | 'SPLIT';
     value?: number;
     range?: number;
     cooldown?: number;
@@ -36,6 +37,7 @@ export interface EntityState {
     isBoss?: boolean;    // ボス敵フラグ（撃破でレシピ獲得）
     // Temporary runtime fields
     poisonedFrames?: number;
+    stunFrames?: number;
     stealthActive?: boolean;
     chargeFrames?: number;   // post-dash cooldown for CHARGE ability
     chargeWindup?: number;   // windup frames remaining (>0 = winding up)
@@ -111,14 +113,14 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
 
     // --- Necromancer Derivations (レア・召喚/死亡利用)
     'necromancer_bone':   { maxHp: 380, attack: 85,  range: 200, speed: DEMON_SPEED * 0.7, maxCooldown: 100, color: 0xffffff, materialType: 0, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'SUMMON', value: 1 }] },
-    'necromancer_meat':   { maxHp: 500, attack: 22,  range: 100, speed: DEMON_SPEED * 0.7, maxCooldown: 360, color: 0xff4444, materialType: 1, attackType: 'ranged', size: 20, accuracy: 1, passiveAbilities: [{ type: 'ALLY_DEATH_EXPLOSION', value: 120, range: 100 }] },
-    'necromancer_spirit': { maxHp: 300, attack: 88,  range: 180, speed: DEMON_SPEED * 0.8, maxCooldown: 80,  color: 0x7700cc, materialType: 2, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'ENEMY_DEATH_SPAWN', value: 2 }] },
+    'necromancer_meat':   { maxHp: 500, attack: 22,  range: 100, speed: DEMON_SPEED * 0.7, maxCooldown: 360, color: 0xff4444, materialType: 1, attackType: 'ranged', size: 20, accuracy: 1, passiveAbilities: [{ type: 'ENEMY_DEATH_HEAL', value: 0.2, range: 150 }] },
+    'necromancer_spirit': { maxHp: 300, attack: 88,  range: 180, speed: DEMON_SPEED * 0.8, maxCooldown: 80,  color: 0x7700cc, materialType: 2, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'ALLY_DEATH_EXPLOSION', value: 120, range: 100 }] },
 
     // --- Wisp Derivations (コモン・高速突撃特攻)
     // DPS目安: bone≈148, meat≈203, spirit≈129 (低HP・高速・短命で実質は下振れ)
     'wisp_bone':   { maxHp: 200, attack: 160, range: 80,  speed: DEMON_SPEED * 1.8, maxCooldown: 65, color: 0xeeeeff, materialType: 0, attackType: 'melee', size: 12, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_PROJECTILE', value: 100 }] },
     'wisp_meat':   { maxHp: 320, attack: 220, range: 80,  speed: DEMON_SPEED * 1.6, maxCooldown: 65, color: 0xff9999, materialType: 1, attackType: 'melee', size: 14, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_HEAL', value: 150, range: 120 }] },
-    'wisp_spirit': { maxHp: 160, attack: 140, range: 100, speed: DEMON_SPEED * 2.2, maxCooldown: 65, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 10, accuracy: 1, passiveAbilities: [{ type: 'CHARGE_EXPLOSION', value: 60 }] },
+    'wisp_spirit': { maxHp: 160, attack: 140, range: 100, speed: DEMON_SPEED * 2.2, maxCooldown: 65, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 10, accuracy: 1, passiveAbilities: [{ type: 'ON_DEATH_STUN', value: 60, range: 120 }] },
 
     // --- Minotaur Derivations (レア・突進タンク)
     // DPS目安: bone≈156, meat≈149, spirit≈150 + 突進AoE
@@ -129,8 +131,8 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
 
     // --- Ghoul Derivations (レア・高速アサシン)
     // DPS目安: bone≈150, meat≈182, spirit≈150
-    'ghoul_bone':   { maxHp: 450, attack: 70, range: 50, speed: DEMON_SPEED * 1.5, maxCooldown: 28, color: 0xaaddaa, materialType: 0, attackType: 'melee', size: 16, accuracy: 1, passiveAbilities: [{ type: 'TARGET_LOWEST_HP' }] },
-    'ghoul_meat':   { maxHp: 600, attack: 85, range: 50, speed: DEMON_SPEED * 1.4, maxCooldown: 28, color: 0xff9988, materialType: 1, attackType: 'melee', size: 18, accuracy: 1, passiveAbilities: [{ type: 'MOVE_REGEN', value: 0.05 }] },
+    'ghoul_bone':   { maxHp: 220, attack: 70, range: 50, speed: DEMON_SPEED * 1.5, maxCooldown: 28, color: 0xaaddaa, materialType: 0, attackType: 'melee', size: 16, accuracy: 1, passiveAbilities: [{ type: 'SPLIT' }] },
+    'ghoul_meat':   { maxHp: 600, attack: 85, range: 50, speed: DEMON_SPEED * 1.4, maxCooldown: 28, color: 0xff9988, materialType: 1, attackType: 'melee', size: 18, accuracy: 1, passiveAbilities: [{ type: 'EVADE', value: 0.9 }] },
     'ghoul_spirit': { maxHp: 340, attack: 60, range: 50, speed: DEMON_SPEED * 1.6, maxCooldown: 24, color: 0x88aaff, materialType: 2, attackType: 'melee', size: 14, accuracy: 1, passiveAbilities: [{ type: 'STEALTH' }] },
 
     // --- Token Units ---
@@ -177,9 +179,9 @@ export const PASSIVE_DESCRIPTIONS: Record<string, string> = {
     'HEAL_AURA': '周囲の味方のHPを徐々に回復する。',
     'AOE_ON_HIT': '弾が命中した際に周囲の敵にも範囲ダメージを与える。',
     'FRONTAL_AOE': '攻撃時、正面の扇形範囲内の全敵にダメージを与える。',
-    'EXPLODE_PROJECTILE': '死亡時に4方向へ貫通弾を発射する。',
+    'EXPLODE_PROJECTILE': '死亡時に周囲の敵へ範囲爆発ダメージを与える。',
     'EXPLODE_HEAL': '死亡時の爆発で周囲の味方を回復する。',
-    'CHARGE_EXPLOSION': '生存時間が長いほど死亡時爆発ダメージが増加する。',
+    'ON_DEATH_STUN': '死亡時に周囲の敵を1秒間スタン状態にする。',
     'ALLY_DEATH_EXPLOSION': '味方が死亡した際に範囲爆発を起こす。',
     'ENEMY_DEATH_SPAWN': '敵が死亡した際に霊スケルトンを召喚する。',
     'CHARGE': '一定距離以内に敵が入ると突進して大ダメージを与える。',
@@ -188,4 +190,7 @@ export const PASSIVE_DESCRIPTIONS: Record<string, string> = {
     'TARGET_LOWEST_HP': '最もHPが低い敵を優先して攻撃する。',
     'MOVE_REGEN': '移動するごとにHPを少し回復する。',
     'STEALTH': '初回攻撃まで敵のターゲットにならない。',
+    'EVADE': '攻撃を高確率で回避する。',
+    'ENEMY_DEATH_HEAL': '敵ユニット撃破時に周囲の味方を回復する。',
+    'SPLIT': '死亡時に自身の分身を2体召喚する。',
 };

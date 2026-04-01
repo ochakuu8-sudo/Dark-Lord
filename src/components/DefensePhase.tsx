@@ -627,6 +627,15 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         }
                     }
                 }
+                // EVADE: chance to completely dodge the attack
+                if (targetEnt.passiveAbilities) {
+                    const evade = targetEnt.passiveCache?.['EVADE'];
+                    if (evade && Math.random() < (evade.value || 0.9)) {
+                        pushFloatingText(s.floatingTexts, { id: generateId(), x: targetEnt.x, y: targetEnt.y - 15, text: '回避', life: 35, maxLife: 35, color: 0x88aaff });
+                        return;
+                    }
+                }
+
                 targetEnt.hp -= finalDamage;
                 s.hitFlashMap[targetEnt.id] = 8;
                 const hitColor = targetEnt.faction === 'DEMON' ? 0xff4444 : 0x88ff88;
@@ -759,26 +768,41 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         }
                     }
 
-                    // EXPLODE_PROJECTILE (wisp_bone): fire 4 piercing projectiles on death
+                    // SPLIT (ghoul_bone): spawn 2 copies on death (no passives to prevent chain)
+                    const splitAbility = ent.passiveCache?.['SPLIT'];
+                    if (splitAbility) {
+                        const spStats = UNIT_STATS[ent.type];
+                        if (spStats) {
+                            for (let k = 0; k < 2; k++) {
+                                const spawnEnt: EntityState = {
+                                    id: generateId(), type: ent.type, faction: 'DEMON',
+                                    x: ent.x + (Math.random() - 0.5) * 30, y: ent.y + (Math.random() - 0.5) * 30,
+                                    hp: spStats.maxHp!, maxHp: spStats.maxHp!,
+                                    attack: spStats.attack!, range: spStats.range!,
+                                    speed: spStats.speed!, cooldown: 0,
+                                    maxCooldown: spStats.maxCooldown!, color: spStats.color!,
+                                    materialType: spStats.materialType, attackType: spStats.attackType,
+                                    size: spStats.size, accuracy: spStats.accuracy,
+                                    spawnedAt: s.frameCount,
+                                };
+                                aliveEntities.push(spawnEnt);
+                            }
+                            pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '🔀分裂!', life: 50, maxLife: 50, color: 0xaaddaa });
+                        }
+                    }
+
+                    // EXPLODE_PROJECTILE (wisp_bone): AoE explosion on death
                     const explodeProj = ent.passiveCache?.['EXPLODE_PROJECTILE'];
                     if (explodeProj) {
-                        const exDmg = explodeProj.value || 200;
-                        for (let k = 0; k < 4; k++) {
-                            const angle = (k * Math.PI / 2);
-                            s.projectiles.push({
-                                id: generateId(),
-                                x: ent.x, y: ent.y,
-                                targetId: 'forward',
-                                targetX: ent.x + Math.cos(angle) * 2000,
-                                targetY: ent.y + Math.sin(angle) * 2000,
-                                speed: 6, damage: exDmg, color: 0xeeeeff,
-                                style: 'orb', size: 10, angle,
-                                trail: [], isPiercing: true, hitIds: new Set(),
-                                maxDistance: 600, distanceTraveled: 0,
-                                sourceId: ent.id, fromProjectile: false,
-                            });
-                        }
-                        pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '💥爆裂弾!', life: 50, maxLife: 50, color: 0xeeeeff });
+                        const exDmg = explodeProj.value || 100;
+                        const expR = 120;
+                        aliveEntities.forEach(hero => {
+                            if (hero.faction === 'HERO' && hero.hp > 0 && Math.hypot(hero.x - ent.x, hero.y - ent.y) <= expR) {
+                                applyDamage(hero, exDmg, ent);
+                            }
+                        });
+                        s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: expR, life: 20, maxLife: 20, color: 0xeeeeff });
+                        pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '💥爆発!', life: 50, maxLife: 50, color: 0xeeeeff });
                     }
 
                     // EXPLODE_HEAL (wisp_meat): heal allies on death explosion
@@ -795,20 +819,18 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '💚癒し爆発!', life: 50, maxLife: 50, color: 0x44ff88 });
                     }
 
-                    // CHARGE_EXPLOSION (wisp_spirit): bonus explosion damage from survival time
-                    const chargeExplosion = ent.passiveCache?.['CHARGE_EXPLOSION'];
-                    if (chargeExplosion) {
-                        const baseDmg = chargeExplosion.value || 100;
-                        const survived = ent.spawnedAt !== undefined ? (s.frameCount - ent.spawnedAt) : 0;
-                        const totalDmg = baseDmg + survived * 2;
-                        const expR = 100;
-                        aliveEntities.forEach(other => {
-                            if (other.faction === 'HERO' && other.hp > 0 && Math.hypot(other.x - ent.x, other.y - ent.y) <= expR) {
-                                applyDamage(other, totalDmg, ent);
+                    // ON_DEATH_STUN (wisp_spirit): stun nearby enemies on death
+                    const onDeathStun = ent.passiveCache?.['ON_DEATH_STUN'];
+                    if (onDeathStun) {
+                        const stunDur = onDeathStun.value || 60;
+                        const stunR = onDeathStun.range || 120;
+                        aliveEntities.forEach(hero => {
+                            if (hero.faction === 'HERO' && hero.hp > 0 && Math.hypot(hero.x - ent.x, hero.y - ent.y) <= stunR) {
+                                hero.stunFrames = stunDur;
                             }
                         });
-                        s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: expR, life: 20, maxLife: 20, color: 0x9966ff });
-                        pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: `⚡チャージ爆発 ${Math.floor(totalDmg)}!`, life: 60, maxLife: 60, color: 0x9966ff });
+                        s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: stunR, life: 25, maxLife: 25, color: 0x88aaff });
+                        pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '⚡スタン!', life: 60, maxLife: 60, color: 0x88aaff });
                     }
 
                     // ALLY_DEATH_EXPLOSION: other necromancer_meats react when this demon dies
@@ -865,6 +887,24 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                 }
                             }
                         }
+
+                        // ENEMY_DEATH_HEAL (necromancer_meat): heal nearby allies when a HERO dies
+                        for (const other of entities) {
+                            if (other.hp > 0 && other.faction === 'DEMON' && other.passiveAbilities) {
+                                const enemyDeathHeal = other.passiveCache?.['ENEMY_DEATH_HEAL'];
+                                if (enemyDeathHeal) {
+                                    const healPct = enemyDeathHeal.value || 0.2;
+                                    const healR = enemyDeathHeal.range || 150;
+                                    aliveEntities.forEach(ally => {
+                                        if (ally.faction === 'DEMON' && ally.hp > 0 && Math.hypot(ally.x - other.x, ally.y - other.y) <= healR) {
+                                            ally.hp = Math.min(ally.maxHp, ally.hp + ally.maxHp * healPct);
+                                        }
+                                    });
+                                    s.aoeFlashes.push({ id: generateId(), x: other.x, y: other.y, radius: 10, maxRadius: healR, life: 20, maxLife: 20, color: 0x44ff88 });
+                                    pushFloatingText(s.floatingTexts, { id: generateId(), x: other.x, y: other.y - 20, text: '💚敵撃破回復!', life: 60, maxLife: 60, color: 0x44ff88 });
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -907,6 +947,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
             if (ent.faction === 'HERO') heroCount++; else demonCount++;
 
+            // STUN: skip movement and attack while stunned
+            if (ent.stunFrames && ent.stunFrames > 0) {
+                ent.stunFrames -= 1;
+                continue;
+            }
 
             let target: EntityState | null = null;
             let minDist = Infinity;
