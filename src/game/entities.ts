@@ -135,6 +135,12 @@ export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     'ghoul_meat':   { maxHp: 600, attack: 85, range: 50, speed: DEMON_SPEED * 1.4, maxCooldown: 28, color: 0xff9988, materialType: 1, attackType: 'melee', size: 18, accuracy: 1, passiveAbilities: [{ type: 'EVADE', value: 0.9 }] },
     'ghoul_spirit': { maxHp: 340, attack: 60, range: 50, speed: DEMON_SPEED * 1.6, maxCooldown: 24, color: 0x88aaff, materialType: 2, attackType: 'melee', size: 14, accuracy: 1, passiveAbilities: [{ type: 'STEALTH' }] },
 
+    // --- Gargoyle Derivations (コモン・重装近接)
+    // DPS目安: bone≈60+反射, meat≈76+ノックバック, spirit≈68+継続ダメージ
+    'gargoyle_bone':   { maxHp: 400, attack: 60,  range: 55, speed: DEMON_SPEED,        maxCooldown: 60, color: 0xbbbbcc, materialType: 0, attackType: 'melee', size: 20, accuracy: 1, passiveAbilities: [{ type: 'REFLECT', value: 0.25 }] },
+    'gargoyle_meat':   { maxHp: 650, attack: 70,  range: 55, speed: DEMON_SPEED,        maxCooldown: 55, color: 0xff8866, materialType: 1, attackType: 'melee', size: 22, accuracy: 1, passiveAbilities: [{ type: 'KNOCKBACK', value: 80 }] },
+    'gargoyle_spirit': { maxHp: 280, attack: 80,  range: 240, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xaa88ff, materialType: 2, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'AREA_DOT', value: 15, range: 80 }] },
+
     // --- Token Units ---
     'zombie': {
         maxHp: 220, attack: 90, range: 45, speed: DEMON_SPEED * 0.6, maxCooldown: 150, color: 0x446644, materialType: 1, attackType: 'melee', size: 18, accuracy: 1

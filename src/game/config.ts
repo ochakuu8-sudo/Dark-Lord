@@ -48,9 +48,9 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'ゴブリン',
         rarity: 'common',
         pattern: [
+            [1], // 肉
             [9], // ？
-            [9], // ？
-            [9], // ？
+            [1], // 肉
         ],
         reward: 1,
         resultMap: { 0: 'goblin_bone', 1: 'goblin_meat', 2: 'goblin_spirit' },
@@ -62,8 +62,8 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'スケルトン',
         rarity: 'common',
         pattern: [
-            [9,  9], // ？ ？
-            [9, -1], // ？ ·
+            [0, -1], // 骨 ·
+            [9,  0], // ？ 骨
         ],
         reward: 1,
         resultMap: { 0: 'skeleton_bone', 1: 'skeleton_meat', 2: 'skeleton_spirit' },
@@ -75,9 +75,9 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'アーチャー',
         rarity: 'common',
         pattern: [
-            [9], // ？
-            [9], // ？
-            [9], // ？
+            [0], // 骨
+            [0], // 骨
+            [0], // 骨
             [9], // ？
         ],
         reward: 2,
@@ -90,8 +90,8 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'オーク',
         rarity: 'common',
         pattern: [
-            [9, 9], // ？ ？
-            [9, 9], // ？ ？
+            [1, 9], // 肉 ？
+            [1, 1], // 肉 肉
         ],
         reward: 2,
         resultMap: { 0: 'orc_bone', 1: 'orc_meat', 2: 'orc_spirit' },
@@ -103,8 +103,8 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'リッチ',
         rarity: 'common',
         pattern: [
-            [-1, 9, -1], // ·  ？ ·
-            [ 9, 9,  9], // ？ ？ ？
+            [2, 9, 2], // 霊 ？ 霊
+            [-1, 2, -1], // ·  霊 ·
         ],
         reward: 2,
         resultMap: { 0: 'lich_bone', 1: 'lich_meat', 2: 'lich_spirit' },
@@ -117,22 +117,22 @@ export const ALL_RECIPES: Recipe[] = [
         rarity: 'common',
         pattern: [
             [9, -1], // ？ ·
-            [9, -1], // ？ ·
-            [9,  9], // ？ ？
+            [1, -1], // 肉 ·
+            [1,  1], // 肉 肉
         ],
         reward: 2,
         resultMap: { 0: 'cerberus_bone', 1: 'cerberus_meat', 2: 'cerberus_spirit' },
     },
 
-    // ── 対角3: 斜め3連 ── ウィスプ（ワイルドカード＋resultMap）
+    // ── 対角3: 斜め3連 ── ウィスプ（固定霊＋ワイルドカード）
     {
         id: 'wisp',
         name: 'ウィスプ',
         rarity: 'common',
         pattern: [
-            [ 9, -1, -1], // ？ ·  ·
+            [ 2, -1, -1], // 霊 ·  ·
             [-1,  9, -1], // ·  ？ ·
-            [-1, -1,  9], // ·  ·  ？
+            [-1, -1,  2], // ·  ·  霊
         ],
         reward: 2,
         resultMap: { 0: 'wisp_bone', 1: 'wisp_meat', 2: 'wisp_spirit' },
@@ -144,8 +144,9 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'インプ',
         rarity: 'common',
         pattern: [
-            [-1, 9, 9], // ·  ？ ？
-            [ 9, 9, -1], // ？ ？ ·
+            [-1, 0], // ·  骨
+            [ 0, 0], // 骨 骨
+            [ 9, -1], // ？ ·
         ],
         reward: 2,
         resultMap: { 0: 'imp_bone', 1: 'imp_meat', 2: 'imp_spirit' },
@@ -157,11 +158,25 @@ export const ALL_RECIPES: Recipe[] = [
         name: 'バンシー',
         rarity: 'common',
         pattern: [
-            [ 9, 9, -1], // ？ ？ ·
-            [-1, 9,  9], // ·  ？ ？
+            [ 2, 2, -1], // 霊 霊 ·
+            [-1, 9,  2], // ·  ？ 霊
         ],
         reward: 2,
         resultMap: { 0: 'banshee_bone', 1: 'banshee_meat', 2: 'banshee_spirit' },
+    },
+
+    // ── J4: 逆Lテトロミノ ── ガーゴイル（新規）
+    {
+        id: 'gargoyle',
+        name: 'ガーゴイル',
+        rarity: 'common',
+        pattern: [
+            [-1, 1], // ·  肉
+            [-1, 1], // ·  肉
+            [ 9, 1], // ？ 肉
+        ],
+        reward: 2,
+        resultMap: { 0: 'gargoyle_bone', 1: 'gargoyle_meat', 2: 'gargoyle_spirit' },
     },
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -247,6 +262,7 @@ export const RECIPE_EMOJIS: Record<string, string> = {
     cerberus: '🐕',
     imp:      '😈',
     banshee:  '👻',
+    gargoyle: '🗿',
     // レア
     wisp:        '✨',
     necromancer: '🧟',
