@@ -4,8 +4,7 @@ import DefensePhase from './DefensePhase';
 import RitualPhase from './RitualPhase';
 import DebugPanel from './DebugPanel';
 
-const LEFT_PANEL_WIDTH = 130;
-const RIGHT_PANEL_WIDTH = 130;
+const LEFT_PANEL_WIDTH = 260;
 
 
 const MAX_WAVES = 1;
@@ -90,23 +89,6 @@ const BattlePhase: React.FC = () => {
                     )}
                 </div>
 
-                {/* 儀式右パネル（報酬・出撃先選択） */}
-                {phase === 'RITUAL' && (
-                    <div
-                        style={{
-                            width: `${RIGHT_PANEL_WIDTH}px`,
-                            flexShrink: 0,
-                            overflow: 'hidden',
-                            height: '100%',
-                            background: '#08060f',
-                            borderLeft: '2px solid #2a1040',
-                            display: 'flex',
-                            flexDirection: 'column',
-                        }}
-                    >
-                        <div id="ritual-right-panel-slot" style={{ width: '100%', height: '100%' }} />
-                    </div>
-                )}
             </div>
 
             {/* 儀式アクションバー（APゲージ・召喚・スキル） */}
@@ -120,8 +102,6 @@ const BattlePhase: React.FC = () => {
                     <div id="ritual-panel-bottom-slot" style={{ width: `${LEFT_PANEL_WIDTH}px`, flexShrink: 0, borderRight: '2px solid #2a1040', overflow: 'hidden' }} />
                     {/* アクションコンテンツ（残り全幅） */}
                     <div id="ritual-bottom-slot" style={{ flex: 1, overflow: 'hidden' }} />
-                    {/* 右パネル下部（幅合わせ） */}
-                    <div style={{ width: `${RIGHT_PANEL_WIDTH}px`, flexShrink: 0, borderLeft: '2px solid #2a1040' }} />
                 </div>
             )}
 
