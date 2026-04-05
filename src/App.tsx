@@ -34,16 +34,9 @@ const GameController: React.FC = () => {
       {phase === 'TITLE' && (
         <div className="title-screen">
           <h1>魔王軍の防衛儀式</h1>
-          <p>パズルで魔物を召喚し、迫りくる勇者を撃退せよ</p>
-          <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button className="start-btn" onClick={startNormalGame}>ゲーム開始</button>
-            <button
-              className="start-btn"
-              onClick={startDebugMode}
-              style={{ background: 'linear-gradient(135deg, #006600, #003300)', borderColor: '#0f0', fontSize: '22px', padding: '20px 40px' }}
-            >
-              🔧 デバッグモード
-            </button>
+          <div style={{ display: 'flex', gap: '24px', justifyContent: 'center' }}>
+            <button className="start-btn" onClick={startNormalGame}>ローグライク</button>
+            <button className="start-btn debug-btn" onClick={startDebugMode}>デバッグ</button>
           </div>
         </div>
       )}

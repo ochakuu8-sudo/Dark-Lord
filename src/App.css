@@ -317,57 +317,54 @@ h2 {
 .title-screen,
 .result-screen {
   text-align: center;
-  background: rgba(0, 0, 0, 0.85);
-  padding: 60px;
-  border-radius: 20px;
-  border: 4px solid #522;
-  box-shadow: 0 0 100px rgba(0, 0, 0, 1), inset 0 0 50px rgba(255, 0, 0, 0.1);
-  max-width: 700px;
-  backdrop-filter: blur(10px);
+  padding: 48px 64px;
 }
 
 .title-screen h1,
 .result-screen h1 {
-  font-size: 56px;
-  color: #ff4444;
-  margin-bottom: 25px;
-  text-shadow: 0 0 20px #f00, 2px 2px 0 #000;
-  font-family: 'Cinzel', serif;
-  /* Falling back to serif if not available */
+  font-size: 48px;
+  color: #fff;
+  margin-bottom: 40px;
+  letter-spacing: 4px;
 }
 
-.title-screen p,
 .result-screen p {
-  font-size: 20px;
-  color: #ddd;
-  margin-bottom: 40px;
-  line-height: 1.6;
+  font-size: 18px;
+  color: #aaa;
+  margin-bottom: 32px;
 }
 
 .start-btn,
 .restart-btn {
-  background: linear-gradient(135deg, #a00, #300);
-  color: white;
-  border: 1px solid #f22;
-  padding: 20px 60px;
-  font-size: 28px;
+  background: #111;
+  color: #fff;
+  border: 1px solid #555;
+  padding: 14px 40px;
+  font-size: 20px;
   font-weight: bold;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.2s, background 0.2s;
   letter-spacing: 2px;
 }
 
 .start-btn:hover,
 .restart-btn:hover {
-  transform: scale(1.05) translateY(-5px);
-  background: linear-gradient(135deg, #d00, #500);
-  box-shadow: 0 15px 30px rgba(255, 0, 0, 0.4);
-  color: #fff;
+  background: #222;
+  border-color: #fff;
 }
 
 .start-btn:active,
 .restart-btn:active {
-  transform: scale(0.98) translateY(0);
+  background: #333;
+}
+
+.debug-btn {
+  border-color: #444;
+  color: #888;
+}
+
+.debug-btn:hover {
+  border-color: #aaa;
+  color: #fff;
 }
