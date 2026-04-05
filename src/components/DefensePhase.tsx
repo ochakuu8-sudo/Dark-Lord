@@ -701,11 +701,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                 }
 
-                // POISON: set poisonedFrames on target
+                // POISON: 毒スタックを積み重ねる（上書きではなく加算）
                 if (attacker && attacker.passiveAbilities) {
                     const poison = attacker.passiveCache?.['POISON'];
                     if (poison && targetEnt.hp > 0) {
-                        targetEnt.poisonedFrames = poison.range || 180;
+                        targetEnt.poisonStacks = (targetEnt.poisonStacks || 0) + (poison.value || 20);
                     }
                 }
 
@@ -1734,11 +1734,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         // (applied to entities that have poisonedFrames > 0)
                     }
                     // IRON: set ironStacks from passive value (max 3 stacks)
-                    if (pa.type === 'IRON' && !ent.ironStacks) {
+                    if (pa.type === 'IRON' && ent.ironStacks === undefined) {
                         ent.ironStacks = Math.min(3, pa.value || 1);
                     }
                     // TAILWIND: initialize tailwindStacks from passive value
-                    if (pa.type === 'TAILWIND' && !ent.tailwindStacks) {
+                    if (pa.type === 'TAILWIND' && ent.tailwindStacks === undefined) {
                         ent.tailwindStacks = pa.value || 10;
                     }
                     // CHARGE_UP: accumulate chargeStacks - reset handled at attack time
@@ -1788,12 +1788,10 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 });
             }
 
-            // POISON tick damage for poisoned entity
-            if (ent.poisonedFrames !== undefined && ent.poisonedFrames > 0) {
-                // Find cerberus_spirit passive value for damage
-                // We stored the damage per second as a custom value per entity - use a fixed 20/s here
-                ent.hp -= (20 / 60) * delta;
-                ent.poisonedFrames -= delta;
+            // POISON tick: スタック数×1ダメ/秒、2秒ごとに1スタック減衰
+            if (ent.poisonStacks && ent.poisonStacks > 0) {
+                ent.hp -= ent.poisonStacks * (1 / 60) * delta;
+                if (s.frameCount % 120 === 0) ent.poisonStacks = Math.max(0, ent.poisonStacks - 1);
                 if (s.frameCount % 20 === 0) {
                     s.particles.push({ id: generateId(), x: ent.x + (Math.random() - 0.5) * 15, y: ent.y, vx: (Math.random() - 0.5) * 1, vy: -0.8, color: 0x44ff88, life: 20 });
                 }

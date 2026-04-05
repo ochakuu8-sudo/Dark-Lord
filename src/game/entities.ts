@@ -73,6 +73,7 @@ export interface EntityState {
     burnStacks?: number;     // 炎上
     freezeStacks?: number;   // 凍結
     curseStacks?: number;    // 呪い
+    poisonStacks?: number;   // 毒（スタック×1ダメ/秒）
     // バフスタック
     tailwindStacks?: number; // 追い風（攻撃速度UP%）
     ironStacks?: number;     // 鋼鉄（被ダメ定数軽減）
