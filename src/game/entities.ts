@@ -8,10 +8,24 @@ export interface PassiveAbility {
         'ALLY_DEATH_EXPLOSION' | 'ENEMY_DEATH_SPAWN' |
         'CHARGE' | 'KNOCKBACK' | 'RANGED_RESIST' |
         'TARGET_LOWEST_HP' | 'MOVE_REGEN' | 'STEALTH' |
-        'ON_DEATH_STUN' | 'EVADE' | 'ENEMY_DEATH_HEAL' | 'SPLIT';
+        'ON_DEATH_STUN' | 'EVADE' | 'ENEMY_DEATH_HEAL' | 'SPLIT' |
+        // 状態異常（スタック制）
+        'BLEED' | 'BURN' | 'FREEZE' | 'CURSE' |
+        // 特殊効果
+        'CRITICAL' | 'CHARGE_UP' | 'PURSUIT' |
+        // CC
+        'FEAR' | 'PULL' |
+        // 防御・バフ
+        'FLOAT' | 'TAILWIND' | 'IRON' |
+        // 攻撃形状
+        'SPREAD_SHOT' | 'LASER' |
+        // 複合トリガー用
+        'BLEED_THORNS' | 'AURA_TAILWIND' | 'PULL_ON_HIT' | 'FREEZE_AURA' |
+        'EXPLODE_HEAL_ON_HIT' | 'ALLY_DEATH_PURSUIT' | 'AREA_DOT_ON_HIT';
     value?: number;
     range?: number;
     cooldown?: number;
+    unitId?: string; // SUMMONで召喚するユニットID（省略時はskeleton_bone）
 }
 
 export interface EntityState {
@@ -51,6 +65,17 @@ export interface EntityState {
     spawnedAt?: number;      // frame number when spawned (for CHARGE_EXPLOSION)
     prevX?: number;          // previous frame position for movement tracking
     prevY?: number;
+    // 状態異常スタック
+    bleedStacks?: number;    // 出血
+    burnStacks?: number;     // 炎上
+    freezeStacks?: number;   // 凍結
+    curseStacks?: number;    // 呪い
+    // バフスタック
+    tailwindStacks?: number; // 追い風（攻撃速度UP%）
+    ironStacks?: number;     // 鋼鉄（被ダメ定数軽減）
+    chargeStacks?: number;   // 充填
+    // CC状態
+    fearFrames?: number;     // 恐怖（後退フレーム数）
 }
 
 export type HeroType = '村人' | '農夫' | '弓兵' | '剣士' | '魔法使い' | '重騎士' | 'プリースト' | '聖騎士' | 'パラディン' | '大魔道士' | '勇者';
@@ -64,86 +89,82 @@ const DEMON_SPEED = 0.8;
 
 export const UNIT_STATS: Record<string, Partial<EntityState>> = {
     // --- Skeleton Derivations (Base: 骨2+X, コモン・中距離射程)
-    // DPS目安: bone≈66, meat≈107, spirit≈52
     'skeleton_bone':   { maxHp: 450, attack: 55,  range: 150, speed: DEMON_SPEED * 0.9,  maxCooldown: 50,  color: 0xaaaacc, materialType: 0, attackType: 'ranged', size: 10, accuracy: 1, passiveAbilities: [{ type: 'DOUBLE_SPAWN' }] },
     'skeleton_meat':   { maxHp: 350, attack: 75,  range: 150, speed: DEMON_SPEED,         maxCooldown: 42,  color: 0xff9999, materialType: 1, attackType: 'ranged', size: 11, accuracy: 1, passiveAbilities: [{ type: 'ON_DEATH_SPAWN', value: 0 }] },
     'skeleton_spirit': { maxHp: 220, attack: 48,  range: 280, speed: DEMON_SPEED * 0.85,  maxCooldown: 55,  color: 0xcc88ff, materialType: 2, attackType: 'ranged', size: 9,  accuracy: 1, passiveAbilities: [{ type: 'UNTARGETABLE' }] },
 
-    // --- Cerberus Derivations (Base: 肉2+X, コモン・高速近接)
-    // DPS目安: bone≈107(RAPID_FIRE), meat≈126, spirit≈67
-    'cerberus_bone':   { maxHp: 500, attack: 25,  range: 50,  speed: DEMON_SPEED * 1.1,  maxCooldown: 14,  color: 0xddccaa, materialType: 0, attackType: 'melee',  size: 22, accuracy: 1, passiveAbilities: [{ type: 'RAPID_FIRE' }] },
-    'cerberus_meat':   { maxHp: 700, attack: 80,  range: 50,  speed: DEMON_SPEED * 1.2,  maxCooldown: 38,  color: 0xff7777, materialType: 1, attackType: 'melee',  size: 24, accuracy: 1, passiveAbilities: [{ type: 'LIFESTEAL', value: 0.3 }] },
+    // --- Cerberus Derivations (Base: 肉2+X, コモン・近接)
+    'cerberus_bone':   { maxHp: 500, attack: 40,  range: 55,  speed: DEMON_SPEED * 1.1,  maxCooldown: 35,  color: 0xddccaa, materialType: 0, attackType: 'melee',  size: 22, accuracy: 1, passiveAbilities: [{ type: 'MACHINE_GUN', value: 3 }] },
+    'cerberus_meat':   { maxHp: 700, attack: 70,  range: 55,  speed: DEMON_SPEED * 1.2,  maxCooldown: 40,  color: 0xff7777, materialType: 1, attackType: 'melee',  size: 24, accuracy: 1, passiveAbilities: [{ type: 'BURN', value: 10 }] },
     'cerberus_spirit': { maxHp: 320, attack: 58,  range: 180, speed: DEMON_SPEED,         maxCooldown: 52,  color: 0xbb88ff, materialType: 2, attackType: 'ranged', size: 20, accuracy: 1, passiveAbilities: [{ type: 'POISON', value: 20, range: 180 }] },
 
     // --- Lich Derivations (Base: 霊3+X, コモン・魔法遠距離)
-    // DPS目安: bone≈69+跳弾連鎖, meat≈91+回復, spirit≈84+範囲
-    'lich_bone':   { maxHp: 420, attack: 75,  range: 280, speed: DEMON_SPEED * 0.8,  maxCooldown: 65,  color: 0xeeeeff, materialType: 0, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'BOUNCE_SHOT', value: 999 }] },
-    'lich_meat':   { maxHp: 600, attack: 88,  range: 200, speed: DEMON_SPEED * 0.8,  maxCooldown: 58,  color: 0xffaaaa, materialType: 1, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'HEAL_AURA', value: 6, range: 120 }] },
-    'lich_spirit': { maxHp: 260, attack: 105, range: 400, speed: DEMON_SPEED * 0.9,  maxCooldown: 75,  color: 0xaa55ff, materialType: 2, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'AOE_ON_HIT', value: 40, range: 80 }] },
+    'lich_bone':   { maxHp: 420, attack: 75,  range: 280, speed: DEMON_SPEED * 0.8,  maxCooldown: 65,  color: 0xeeeeff, materialType: 0, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'BOUNCE_SHOT', value: 1 }, { type: 'CRITICAL', value: 50 }] },
+    'lich_meat':   { maxHp: 600, attack: 88,  range: 220, speed: DEMON_SPEED * 0.8,  maxCooldown: 58,  color: 0xffaaaa, materialType: 1, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'HEAL_SHOT' }, { type: 'TARGET_LOWEST_HP' }] },
+    'lich_spirit': { maxHp: 260, attack: 80,  range: 350, speed: DEMON_SPEED * 0.9,  maxCooldown: 75,  color: 0xaa55ff, materialType: 2, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'AREA_DOT_ON_HIT', value: 8, range: 80 }] },
 
     // --- Goblin Derivations (コモン・初期スターター)
-    // 骨: 単体高火力  肉: 高HP耐久  霊: 範囲攻撃低火力
-    'goblin_bone':   { maxHp: 110,  attack: 55, range: 40, speed: DEMON_SPEED,        maxCooldown: 42, color: 0xbbaa88, materialType: 0, attackType: 'melee',  size: 14, accuracy: 1 },
-    'goblin_meat':   { maxHp: 400,  attack: 18, range: 40, speed: DEMON_SPEED * 0.85, maxCooldown: 50, color: 0xff9966, materialType: 1, attackType: 'melee',  size: 16, accuracy: 1 },
-    'goblin_spirit': { maxHp: 80,   attack: 18, range: 100, speed: DEMON_SPEED,       maxCooldown: 50, color: 0xaa88ff, materialType: 2, attackType: 'ranged', size: 11, accuracy: 1, passiveAbilities: [{ type: 'INSTANT_AOE', value: 18, range: 80 }] },
+    'goblin_bone':   { maxHp: 110,  attack: 55, range: 40,  speed: DEMON_SPEED,        maxCooldown: 42, color: 0xbbaa88, materialType: 0, attackType: 'melee',  size: 14, accuracy: 1, passiveAbilities: [{ type: 'LIFESTEAL', value: 0.1 }] },
+    'goblin_meat':   { maxHp: 400,  attack: 18, range: 40,  speed: DEMON_SPEED * 0.85, maxCooldown: 50, color: 0xff9966, materialType: 1, attackType: 'melee',  size: 16, accuracy: 1, passiveAbilities: [{ type: 'SELF_REGEN', value: 8 }] },
+    'goblin_spirit': { maxHp: 80,   attack: 22, range: 120, speed: DEMON_SPEED,        maxCooldown: 50, color: 0xaa88ff, materialType: 2, attackType: 'ranged', size: 11, accuracy: 1, passiveAbilities: [{ type: 'EVADE', value: 0.5 }] },
 
-    // --- Imp Derivations (コモン・中距離支援)
-    // DPS目安: bone≈40+ピース回収, meat≈ヒール, spirit≈55+死体爆発
-    'imp_bone':   { maxHp: 180, attack: 30, range: 60,  speed: DEMON_SPEED * 1.3, maxCooldown: 45, color: 0xddbb88, materialType: 0, attackType: 'melee',  size: 13, accuracy: 1, passiveAbilities: [{ type: 'PIECE_RETURN', range: 120 }] },
-    'imp_meat':   { maxHp: 250, attack: 40, range: 180, speed: DEMON_SPEED * 1.0, maxCooldown: 60, color: 0xff9977, materialType: 1, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'HEAL_SHOT' }] },
-    'imp_spirit': { maxHp: 150, attack: 55, range: 160, speed: DEMON_SPEED * 1.1, maxCooldown: 50, color: 0xbb77ff, materialType: 2, attackType: 'ranged', size: 12, accuracy: 1, passiveAbilities: [{ type: 'CORPSE_EXPLOSION', value: 80, range: 80 }] },
+    // --- Imp Derivations (コモン・中距離)
+    'imp_bone':   { maxHp: 180, attack: 35, range: 60,  speed: DEMON_SPEED * 1.3, maxCooldown: 45, color: 0xddbb88, materialType: 0, attackType: 'melee',  size: 13, accuracy: 1, passiveAbilities: [{ type: 'CRITICAL', value: 10 }] },
+    'imp_meat':   { maxHp: 250, attack: 40, range: 55,  speed: DEMON_SPEED * 1.0, maxCooldown: 55, color: 0xff9977, materialType: 1, attackType: 'melee',  size: 14, accuracy: 1, passiveAbilities: [{ type: 'BLEED_THORNS', value: 5 }] },
+    'imp_spirit': { maxHp: 150, attack: 50, range: 160, speed: DEMON_SPEED * 1.1, maxCooldown: 50, color: 0xbb77ff, materialType: 2, attackType: 'ranged', size: 12, accuracy: 1, passiveAbilities: [{ type: 'AURA_TAILWIND', value: 5, range: 120, cooldown: 180 }] },
 
-    // --- Banshee Derivations (コモン・霊体スクリーマー)
-    // DPS目安: bone≈80+範囲, meat≈60+複製, spirit≈100+自爆
-    'banshee_bone':   { maxHp: 200, attack: 90,  range: 300, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xeeeeff, materialType: 0, attackType: 'ranged', size: 13, accuracy: 1, passiveAbilities: [{ type: 'INSTANT_AOE', value: 60, range: 100 }] },
-    'banshee_meat':   { maxHp: 280, attack: 60,  range: 180, speed: DEMON_SPEED * 1.0, maxCooldown: 55, color: 0xffbbbb, materialType: 1, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'CLONE' }] },
-    'banshee_spirit': { maxHp: 160, attack: 100, range: 60,  speed: DEMON_SPEED * 1.4, maxCooldown: 50, color: 0xaa66ff, materialType: 2, attackType: 'melee',  size: 11, accuracy: 1, passiveAbilities: [{ type: 'PROXIMITY_EXPLOSION', value: 150, range: 80 }] },
+    // --- Banshee Derivations (コモン・霊体)
+    'banshee_bone':   { maxHp: 200, attack: 90,  range: 300, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xeeeeff, materialType: 0, attackType: 'ranged', size: 13, accuracy: 1, passiveAbilities: [{ type: 'REFLECT', value: 1.0 }] },
+    'banshee_meat':   { maxHp: 280, attack: 55,  range: 200, speed: DEMON_SPEED * 1.0, maxCooldown: 55, color: 0xffbbbb, materialType: 1, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'PULL_ON_HIT', value: 80, range: 120 }] },
+    'banshee_spirit': { maxHp: 200, attack: 10,  range: 80,  speed: DEMON_SPEED * 0.8, maxCooldown: 30, color: 0xaa66ff, materialType: 2, attackType: 'melee',  size: 16, accuracy: 1, passiveAbilities: [{ type: 'FREEZE_AURA', value: 8, range: 80 }] },
 
-    // --- Orc Derivations (コモン・低速重装AOE)
-    // DPS目安: bone≈24×AOE, meat≈28×AOE, spirit≈30×AOE
-    'orc_bone':   { maxHp: 1200, attack: 42, range: 60, speed: DEMON_SPEED,        maxCooldown: 105, color: 0xcccccc, materialType: 0, attackType: 'melee', size: 26, accuracy: 1, passiveAbilities: [{ type: 'FRONTAL_AOE', range: 60, value: 1.0 }, { type: 'REFLECT', value: 0.3 }] },
-    'orc_meat':   { maxHp: 850,  attack: 55, range: 60, speed: DEMON_SPEED,        maxCooldown: 120, color: 0xff6666, materialType: 1, attackType: 'melee', size: 24, accuracy: 1, passiveAbilities: [{ type: 'FRONTAL_AOE', range: 60, value: 1.0 }, { type: 'BERSERK', value: 2.0 }] },
-    'orc_spirit': { maxHp: 500,  attack: 44, range: 60, speed: DEMON_SPEED * 1.2,  maxCooldown: 88,  color: 0xaa66ff, materialType: 2, attackType: 'melee', size: 20, accuracy: 1, passiveAbilities: [{ type: 'FRONTAL_AOE', range: 60, value: 1.0 }, { type: 'SELF_REGEN', value: 25 }] },
+    // --- Orc Derivations (コモン・重装近接)
+    'orc_bone':   { maxHp: 1200, attack: 42, range: 60, speed: DEMON_SPEED,        maxCooldown: 100, color: 0xcccccc, materialType: 0, attackType: 'melee', size: 26, accuracy: 1, passiveAbilities: [{ type: 'REFLECT', value: 0.25 }] },
+    'orc_meat':   { maxHp: 850,  attack: 50, range: 60, speed: DEMON_SPEED,        maxCooldown: 120, color: 0xff6666, materialType: 1, attackType: 'melee', size: 24, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_HEAL_ON_HIT', value: 100, range: 120 }] },
+    'orc_spirit': { maxHp: 600,  attack: 44, range: 60, speed: DEMON_SPEED * 1.1,  maxCooldown: 90,  color: 0xaa66ff, materialType: 2, attackType: 'melee', size: 22, accuracy: 1, passiveAbilities: [{ type: 'IRON', value: 10 }] },
 
     // --- Archer Derivations (コモン・遠距離)
-    // DPS目安: bone≈72(超長距離), meat≈キュー連射, spirit≈106(貫通)
-    'archer_bone':   { maxHp: 230, attack: 105, range: 580, speed: DEMON_SPEED,        maxCooldown: 88, color: 0xdddddd, materialType: 0, attackType: 'ranged', size: 16, accuracy: 1 },
-    'archer_meat':   { maxHp: 380, attack: 60,  range: 200, speed: DEMON_SPEED * 0.9,  maxCooldown: 22, color: 0xff9999, materialType: 1, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'MACHINE_GUN', value: 5 }] },
-    'archer_spirit': { maxHp: 170, attack: 62,  range: 360, speed: DEMON_SPEED,        maxCooldown: 35, color: 0xcc88ff, materialType: 2, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'PIERCING', value: 600 }] },
+    'archer_bone':   { maxHp: 230, attack: 95,  range: 540, speed: DEMON_SPEED,        maxCooldown: 88, color: 0xdddddd, materialType: 0, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'CRITICAL', value: 30 }, { type: 'TAILWIND', value: 10 }] },
+    'archer_meat':   { maxHp: 380, attack: 55,  range: 220, speed: DEMON_SPEED * 0.9,  maxCooldown: 90, color: 0xff9999, materialType: 1, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'LASER' }, { type: 'BURN', value: 5 }] },
+    'archer_spirit': { maxHp: 170, attack: 55,  range: 180, speed: DEMON_SPEED,        maxCooldown: 55, color: 0xcc88ff, materialType: 2, attackType: 'ranged', size: 14, accuracy: 1, passiveAbilities: [{ type: 'SPREAD_SHOT', value: 3 }, { type: 'BOUNCE_SHOT', value: 2 }] },
 
     // --- Necromancer Derivations (レア・召喚/死亡利用)
-    'necromancer_bone':   { maxHp: 380, attack: 85,  range: 200, speed: DEMON_SPEED * 0.7, maxCooldown: 100, color: 0xffffff, materialType: 0, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'SUMMON', value: 1 }] },
-    'necromancer_meat':   { maxHp: 500, attack: 22,  range: 100, speed: DEMON_SPEED * 0.7, maxCooldown: 360, color: 0xff4444, materialType: 1, attackType: 'ranged', size: 20, accuracy: 1, passiveAbilities: [{ type: 'ENEMY_DEATH_HEAL', value: 0.2, range: 150 }] },
-    'necromancer_spirit': { maxHp: 300, attack: 88,  range: 180, speed: DEMON_SPEED * 0.8, maxCooldown: 80,  color: 0x7700cc, materialType: 2, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'ALLY_DEATH_EXPLOSION', value: 120, range: 100 }] },
+    'necromancer_bone':   { maxHp: 380, attack: 85,  range: 200, speed: DEMON_SPEED * 0.7, maxCooldown: 100, color: 0xffffff, materialType: 0, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'SUMMON', value: 1, cooldown: 180 }] },
+    'necromancer_meat':   { maxHp: 500, attack: 22,  range: 100, speed: DEMON_SPEED * 0.7, maxCooldown: 360, color: 0xff4444, materialType: 1, attackType: 'ranged', size: 20, accuracy: 1, passiveAbilities: [{ type: 'ENEMY_DEATH_HEAL', value: 0.15, range: 150 }] },
+    'necromancer_spirit': { maxHp: 300, attack: 88,  range: 180, speed: DEMON_SPEED * 0.8, maxCooldown: 80,  color: 0x7700cc, materialType: 2, attackType: 'ranged', size: 16, accuracy: 1, passiveAbilities: [{ type: 'INSTANT_AOE', value: 88, range: 80 }, { type: 'ALLY_DEATH_PURSUIT' }] },
 
     // --- Wisp Derivations (コモン・高速突撃特攻)
     // DPS目安: bone≈148, meat≈203, spirit≈129 (低HP・高速・短命で実質は下振れ)
-    'wisp_bone':   { maxHp: 200, attack: 160, range: 80,  speed: DEMON_SPEED * 1.8, maxCooldown: 65, color: 0xeeeeff, materialType: 0, attackType: 'melee', size: 12, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_PROJECTILE', value: 100 }] },
-    'wisp_meat':   { maxHp: 320, attack: 220, range: 80,  speed: DEMON_SPEED * 1.6, maxCooldown: 65, color: 0xff9999, materialType: 1, attackType: 'melee', size: 14, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_HEAL', value: 150, range: 120 }] },
-    'wisp_spirit': { maxHp: 160, attack: 140, range: 100, speed: DEMON_SPEED * 2.2, maxCooldown: 65, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 10, accuracy: 1, passiveAbilities: [{ type: 'ON_DEATH_STUN', value: 60, range: 120 }] },
+    'wisp_bone':   { maxHp: 200, attack: 160, range: 80,  speed: DEMON_SPEED * 1.8, maxCooldown: 65, color: 0xeeeeff, materialType: 0, attackType: 'melee', size: 12, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_PROJECTILE', value: 100 }, { type: 'CHARGE_UP' }] },
+    'wisp_meat':   { maxHp: 320, attack: 32,  range: 80,  speed: DEMON_SPEED * 1.6, maxCooldown: 65, color: 0xff9999, materialType: 1, attackType: 'melee', size: 14, accuracy: 1, passiveAbilities: [{ type: 'AURA_REGEN', value: 32, range: 120 }] },
+    'wisp_spirit': { maxHp: 160, attack: 140, range: 100, speed: DEMON_SPEED * 2.2, maxCooldown: 65, color: 0xcc88ff, materialType: 2, attackType: 'melee', size: 10, accuracy: 1, passiveAbilities: [{ type: 'EXPLODE_PROJECTILE', value: 130 }, { type: 'KNOCKBACK', value: 100 }] },
 
     // --- Minotaur Derivations (レア・突進タンク)
     // DPS目安: bone≈156, meat≈149, spirit≈150 + 突進AoE
     // value=突進AoEダメージ, range=溜め開始トリガー距離, cooldown=突進後クールダウン(frames)
     'minotaur_bone':   { maxHp: 1100, attack: 130, range: 50, speed: DEMON_SPEED * 0.9, maxCooldown: 50, color: 0xddaa77, materialType: 0, attackType: 'melee', size: 24, accuracy: 1, passiveAbilities: [{ type: 'CHARGE', value: 300, range: 260, cooldown: 360 }] },
-    'minotaur_meat':   { maxHp: 1350, attack: 112, range: 50, speed: DEMON_SPEED * 1.0, maxCooldown: 45, color: 0xff5555, materialType: 1, attackType: 'melee', size: 26, accuracy: 1, passiveAbilities: [{ type: 'RANGED_RESIST', value: 0.5 }, { type: 'CHARGE', value: 260, range: 220, cooldown: 300 }] },
-    'minotaur_spirit': { maxHp: 820,  attack: 95,  range: 50, speed: DEMON_SPEED * 1.1, maxCooldown: 38, color: 0x9966ff, materialType: 2, attackType: 'melee', size: 22, accuracy: 1, passiveAbilities: [{ type: 'CHARGE', value: 220, range: 200, cooldown: 270 }, { type: 'KNOCKBACK', value: 120 }] },
+    'minotaur_meat':   { maxHp: 1350, attack: 112, range: 50, speed: DEMON_SPEED * 1.0, maxCooldown: 45, color: 0xff5555, materialType: 1, attackType: 'melee', size: 26, accuracy: 1, passiveAbilities: [{ type: 'FLOAT' }, { type: 'CHARGE', value: 260, range: 9999, cooldown: 300 }] },
+    'minotaur_spirit': { maxHp: 820,  attack: 95,  range: 50, speed: DEMON_SPEED * 1.1, maxCooldown: 38, color: 0x9966ff, materialType: 2, attackType: 'melee', size: 22, accuracy: 1, passiveAbilities: [{ type: 'CHARGE', value: 220, range: 200, cooldown: 270 }, { type: 'PULL', range: 200 }] },
 
     // --- Ghoul Derivations (レア・高速アサシン)
     // DPS目安: bone≈150, meat≈182, spirit≈150
-    'ghoul_bone':   { maxHp: 220, attack: 70, range: 50, speed: DEMON_SPEED * 1.5, maxCooldown: 28, color: 0xaaddaa, materialType: 0, attackType: 'melee', size: 16, accuracy: 1, passiveAbilities: [{ type: 'SPLIT' }] },
-    'ghoul_meat':   { maxHp: 600, attack: 85, range: 50, speed: DEMON_SPEED * 1.4, maxCooldown: 28, color: 0xff9988, materialType: 1, attackType: 'melee', size: 18, accuracy: 1, passiveAbilities: [{ type: 'EVADE', value: 0.9 }] },
+    'ghoul_bone':   { maxHp: 220, attack: 70, range: 50, speed: DEMON_SPEED * 1.5, maxCooldown: 28, color: 0xaaddaa, materialType: 0, attackType: 'melee', size: 16, accuracy: 1, passiveAbilities: [{ type: 'BLEED', value: 20 }] },
+    'ghoul_meat':   { maxHp: 600, attack: 85, range: 50, speed: DEMON_SPEED * 1.4, maxCooldown: 28, color: 0xff9988, materialType: 1, attackType: 'melee', size: 18, accuracy: 1, passiveAbilities: [{ type: 'SUMMON', value: 1, cooldown: 360, unitId: 'ghoul_spawn' }] },
     'ghoul_spirit': { maxHp: 340, attack: 60, range: 50, speed: DEMON_SPEED * 1.6, maxCooldown: 24, color: 0x88aaff, materialType: 2, attackType: 'melee', size: 14, accuracy: 1, passiveAbilities: [{ type: 'STEALTH' }] },
 
-    // --- Gargoyle Derivations (コモン・重装近接)
-    // DPS目安: bone≈60+反射, meat≈76+ノックバック, spirit≈68+継続ダメージ
-    'gargoyle_bone':   { maxHp: 400, attack: 60,  range: 55, speed: DEMON_SPEED,        maxCooldown: 60, color: 0xbbbbcc, materialType: 0, attackType: 'melee', size: 20, accuracy: 1, passiveAbilities: [{ type: 'REFLECT', value: 0.25 }] },
-    'gargoyle_meat':   { maxHp: 650, attack: 70,  range: 55, speed: DEMON_SPEED,        maxCooldown: 55, color: 0xff8866, materialType: 1, attackType: 'melee', size: 22, accuracy: 1, passiveAbilities: [{ type: 'KNOCKBACK', value: 80 }] },
-    'gargoyle_spirit': { maxHp: 280, attack: 80,  range: 240, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xaa88ff, materialType: 2, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'AREA_DOT', value: 15, range: 80 }] },
+    // --- Gargoyle Derivations (コモン・浮遊遠距離)
+    // DPS目安: bone≈60+浮遊, meat≈76+遠距離耐性, spirit≈68+ステルス
+    'gargoyle_bone':   { maxHp: 400, attack: 60,  range: 240, speed: DEMON_SPEED,        maxCooldown: 60, color: 0xbbbbcc, materialType: 0, attackType: 'ranged', size: 20, accuracy: 1, passiveAbilities: [{ type: 'FLOAT' }, { type: 'REFLECT', value: 0.15 }] },
+    'gargoyle_meat':   { maxHp: 650, attack: 70,  range: 200, speed: DEMON_SPEED,        maxCooldown: 55, color: 0xff8866, materialType: 1, attackType: 'ranged', size: 22, accuracy: 1, passiveAbilities: [{ type: 'FLOAT' }, { type: 'RANGED_RESIST', value: 0.5 }] },
+    'gargoyle_spirit': { maxHp: 280, attack: 80,  range: 280, speed: DEMON_SPEED * 0.9, maxCooldown: 70, color: 0xaa88ff, materialType: 2, attackType: 'ranged', size: 18, accuracy: 1, passiveAbilities: [{ type: 'FLOAT' }, { type: 'STEALTH' }] },
 
     // --- Token Units ---
     'zombie': {
         maxHp: 220, attack: 90, range: 45, speed: DEMON_SPEED * 0.6, maxCooldown: 150, color: 0x446644, materialType: 1, attackType: 'melee', size: 18, accuracy: 1
+    },
+    'ghoul_spawn': {
+        maxHp: 120, attack: 55, range: 50, speed: DEMON_SPEED * 1.4, maxCooldown: 28, color: 0x88dd88, materialType: 1, attackType: 'melee', size: 12, accuracy: 1,
+        passiveAbilities: [{ type: 'SUMMON', value: 1, cooldown: 360, unitId: 'ghoul_spawn' }]
     },
     // ===== 英雄軍（敵）=====
     '村人': { maxHp: 900, attack: 20, range: 40, speed: 1.1, maxCooldown: 70, color: 0xddddbb },
@@ -200,4 +221,31 @@ export const PASSIVE_DESCRIPTIONS: Record<string, string> = {
     'EVADE':                '「被攻撃時」攻撃を「回避」する。',
     'ENEMY_DEATH_HEAL':     '「敵が死亡時」「周囲」の「味方」を「範囲回復」する。',
     'SPLIT':                '「死亡時」「自身」の分身を2体「召喚」する。',
+    // 状態異常（スタック制）
+    'BLEED':                '「命中時」「対象」に「出血」スタックを「付与」する（毎フレームダメージ）。',
+    'BURN':                 '「命中時」「対象」に「炎上」スタックを「付与」する（30f毎にダメージ）。',
+    'FREEZE':               '「命中時」「対象」に「凍結」スタックを「付与」し、移動速度を低下させる。',
+    'CURSE':                '「命中時」「対象」に「呪い」スタックを「付与」し、受けるダメージを増加させる。',
+    // 特殊効果
+    'CRITICAL':             '「攻撃時」確率でダメージが2倍になる「会心」が発動する。',
+    'CHARGE_UP':            '「常時」攻撃するたびに「充填」スタックを蓄積し、最大時に大ダメージ。',
+    'PURSUIT':              '「常時」最も遠くの敵を優先して追跡する。',
+    // CC
+    'FEAR':                 '「命中時」「対象」に「恐怖」を「付与」し、一時的に後退させる。',
+    'PULL':                 '「常時」「周囲」の敵を「引き寄せ」る。',
+    // 防御・バフ
+    'FLOAT':                '「常時」「浮遊」状態になり、近接攻撃が届きにくくなる。',
+    'TAILWIND':             '「常時」自身の攻撃速度を増加させる。',
+    'IRON':                 '「常時」受けるダメージを一定量「軽減」する。',
+    // 攻撃形状
+    'SPREAD_SHOT':          '「攻撃時」弾を「扇状」に「複数発射」する。',
+    'LASER':                '「攻撃時」直線状の「レーザー」で一斉攻撃する。',
+    // 複合トリガー
+    'BLEED_THORNS':         '「被攻撃時」攻撃者に「出血」を「付与」する。',
+    'AURA_TAILWIND':        '「X秒毎に」「周囲」の「味方」に「攻撃速度UP」を「付与」する。',
+    'PULL_ON_HIT':          '「命中時」「対象」を「引き寄せ」る。',
+    'FREEZE_AURA':          '「常時」「周囲」の敵に「凍結」を「付与」し続ける。',
+    'EXPLODE_HEAL_ON_HIT':  '「命中時」「周囲」の「味方」を「回復」する。',
+    'ALLY_DEATH_PURSUIT':   '「味方が死亡時」死亡地点に「向かって突進」する。',
+    'AREA_DOT_ON_HIT':      '「命中時」着弾地点に「持続ダメージ領域」を生成する。',
 };

@@ -7,11 +7,13 @@ import './App.css';
 const GameController: React.FC = () => {
   const { phase, setPhase, resetGame, isDebugMode, setIsDebugMode, unlockRecipe, addEquippedRecipe } = useGame();
 
-  // ゴブリンを固定初期レシピとして装備
+  // スケルトン・ゴブリン・ウィスプを固定初期レシピとして装備
   const startNormalGame = () => {
     setIsDebugMode(false);
-    unlockRecipe('goblin');
-    addEquippedRecipe('goblin');
+    ['skeleton', 'goblin', 'wisp'].forEach(id => {
+      unlockRecipe(id);
+      addEquippedRecipe(id);
+    });
     setPhase('RITUAL');
   };
 
@@ -19,7 +21,7 @@ const GameController: React.FC = () => {
     setIsDebugMode(true);
     [
       'goblin', 'skeleton', 'archer', 'orc', 'lich', 'cerberus', 'imp', 'banshee',
-      'wisp', 'necromancer', 'minotaur', 'ghoul',
+      'wisp', 'necromancer', 'minotaur', 'ghoul', 'gargoyle',
     ].forEach(id => {
       unlockRecipe(id);
       addEquippedRecipe(id);

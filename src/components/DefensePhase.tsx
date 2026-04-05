@@ -223,6 +223,7 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
         const initialEntities: EntityState[] = [];
         const hasGiantHeart = ownedRelics.includes('giant_heart');
         const hasFireCrown = ownedRelics.includes('fire_crown');
+        const hasSagesStone = ownedRelics.includes('sages_stone');
 
         summonedMonsters.forEach(unit => {
             const stats = UNIT_STATS[unit.type] || UNIT_STATS['orc_bone'] || Object.values(UNIT_STATS)[0];
@@ -267,6 +268,27 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 stealthActive: hasStealthPassive ? true : undefined,
                 spawnedAt: 0,
             });
+
+            // 賢者の石: spawn one extra copy
+            if (hasSagesStone) {
+                initialEntities.push({
+                    id: generateId(), type: unit.type, faction: 'DEMON',
+                    x: groupX + (Math.random() - 0.5) * 50, y: groupY + (Math.random() - 0.5) * 50,
+                    hp: Math.floor(stats.maxHp! * hpMult), maxHp: Math.floor(stats.maxHp! * hpMult),
+                    attack: finalAttack, range: stats.range!,
+                    speed: stats.speed!,
+                    cooldown: Math.random() * (stats.maxCooldown! / 2),
+                    maxCooldown: stats.maxCooldown!, color: stats.color!,
+                    materialType: stats.materialType,
+                    attackType: stats.attackType,
+                    size: stats.size,
+                    accuracy: stats.accuracy,
+                    passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined,
+                    passiveCache: buildPassiveCache(stats.passiveAbilities),
+                    stealthActive: hasStealthPassive ? true : undefined,
+                    spawnedAt: 0,
+                });
+            }
         });
 
         // 既存のHEROエンティティを保持（RITUAL中に敵が表示される必要がある）
@@ -636,6 +658,16 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                 }
 
+                // IRON: flat damage reduction per stack
+                if (targetEnt.ironStacks && targetEnt.ironStacks > 0) {
+                    finalDamage = Math.max(0, finalDamage - targetEnt.ironStacks * 10);
+                }
+
+                // CURSE: damage amplification per stack
+                if (targetEnt.curseStacks && targetEnt.curseStacks > 0) {
+                    finalDamage *= (1 + targetEnt.curseStacks * 0.1);
+                }
+
                 targetEnt.hp -= finalDamage;
                 s.hitFlashMap[targetEnt.id] = 8;
                 const hitColor = targetEnt.faction === 'DEMON' ? 0xff4444 : 0x88ff88;
@@ -674,6 +706,85 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     const poison = attacker.passiveCache?.['POISON'];
                     if (poison && targetEnt.hp > 0) {
                         targetEnt.poisonedFrames = poison.range || 180;
+                    }
+                }
+
+                // BLEED: add bleed stacks on target
+                if (attacker && attacker.passiveAbilities && targetEnt.hp > 0) {
+                    const bleedAbility = attacker.passiveCache?.['BLEED'];
+                    if (bleedAbility) {
+                        targetEnt.bleedStacks = (targetEnt.bleedStacks || 0) + (bleedAbility.value || 10);
+                        if (Math.random() < 0.5) s.particles.push({ id: generateId(), x: targetEnt.x, y: targetEnt.y, vx: (Math.random()-0.5)*1.5, vy: -1, color: 0xff2222, life: 20 });
+                    }
+                }
+
+                // BURN: add burn stacks on target
+                if (attacker && attacker.passiveAbilities && targetEnt.hp > 0) {
+                    const burnAbility = attacker.passiveCache?.['BURN'];
+                    if (burnAbility) {
+                        targetEnt.burnStacks = (targetEnt.burnStacks || 0) + (burnAbility.value || 5);
+                    }
+                }
+
+                // FREEZE: add freeze stacks on target
+                if (attacker && attacker.passiveAbilities && targetEnt.hp > 0) {
+                    const freezeAbility = attacker.passiveCache?.['FREEZE'];
+                    if (freezeAbility) {
+                        targetEnt.freezeStacks = (targetEnt.freezeStacks || 0) + (freezeAbility.value || 3);
+                    }
+                }
+
+                // CURSE: add curse stacks on target
+                if (attacker && attacker.passiveAbilities && targetEnt.hp > 0) {
+                    const curseAbility = attacker.passiveCache?.['CURSE'];
+                    if (curseAbility) {
+                        targetEnt.curseStacks = (targetEnt.curseStacks || 0) + (curseAbility.value || 2);
+                    }
+                }
+
+                // FEAR: apply fear frames on target
+                if (attacker && attacker.passiveAbilities && targetEnt.hp > 0) {
+                    const fearAbility = attacker.passiveCache?.['FEAR'];
+                    if (fearAbility) {
+                        targetEnt.fearFrames = (fearAbility.value || 60);
+                    }
+                }
+
+                // BLEED_THORNS: apply bleed to attacker when this unit is hit
+                if (attacker && attacker.hp > 0 && targetEnt.passiveAbilities) {
+                    const bleedThorns = targetEnt.passiveCache?.['BLEED_THORNS'];
+                    if (bleedThorns) {
+                        attacker.bleedStacks = (attacker.bleedStacks || 0) + (bleedThorns.value || 5);
+                    }
+                }
+
+                // EXPLODE_HEAL_ON_HIT: heal nearby demons when this unit hits
+                if (attacker && attacker.passiveAbilities && targetEnt.hp > 0) {
+                    const explodeHealOnHit = attacker.passiveCache?.['EXPLODE_HEAL_ON_HIT'];
+                    if (explodeHealOnHit) {
+                        const healR = explodeHealOnHit.range || 120;
+                        const healAmt = explodeHealOnHit.value || 50;
+                        entities.forEach(ally => {
+                            if (ally.faction === 'DEMON' && ally.hp > 0 && Math.hypot(ally.x - attacker.x, ally.y - attacker.y) <= healR) {
+                                ally.hp = Math.min(ally.maxHp, ally.hp + healAmt);
+                            }
+                        });
+                        if (s.frameCount % 5 === 0) s.aoeFlashes.push({ id: generateId(), x: attacker.x, y: attacker.y, radius: 10, maxRadius: healR, life: 12, maxLife: 12, color: 0x44ff88 });
+                    }
+                }
+
+                // AREA_DOT_ON_HIT: create DoT zone at hit location
+                if (attacker && attacker.passiveAbilities && targetEnt.hp > 0) {
+                    const areaDotOnHit = attacker.passiveCache?.['AREA_DOT_ON_HIT'];
+                    if (areaDotOnHit && s.frameCount % 3 === 0) {
+                        const dotR = areaDotOnHit.range || 80;
+                        const dotDmg = areaDotOnHit.value || 8;
+                        entities.forEach(other => {
+                            if (other.faction === 'HERO' && other.hp > 0 && Math.hypot(other.x - targetEnt.x, other.y - targetEnt.y) <= dotR) {
+                                other.hp -= dotDmg * 0.1;
+                            }
+                        });
+                        if (s.frameCount % 30 === 0) s.aoeFlashes.push({ id: generateId(), x: targetEnt.x, y: targetEnt.y, radius: 10, maxRadius: dotR, life: 10, maxLife: 10, color: 0x8844ff });
                     }
                 }
             }
@@ -859,6 +970,22 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         }
                     }
 
+                    // ALLY_DEATH_PURSUIT (necromancer_spirit): rush toward dead ally's position
+                    if (ent.faction === 'DEMON') {
+                        for (const other of entities) {
+                            if (other.hp > 0 && other.faction === 'DEMON' && other.passiveAbilities && other.id !== ent.id) {
+                                const allyDeathPursuit = other.passiveCache?.['ALLY_DEATH_PURSUIT'];
+                                if (allyDeathPursuit) {
+                                    // Rush toward dead ally's position
+                                    const pursuitAngle = Math.atan2(ent.y - other.y, ent.x - other.x);
+                                    other.x += Math.cos(pursuitAngle) * 60;
+                                    other.y += Math.sin(pursuitAngle) * 60;
+                                    pushFloatingText(s.floatingTexts, { id: generateId(), x: other.x, y: other.y - 20, text: '💀追撃!', life: 45, maxLife: 45, color: 0xcc44ff });
+                                }
+                            }
+                        }
+                    }
+
                     // ENEMY_DEATH_SPAWN (necromancer_spirit): spawn skeleton_spirit when a HERO dies
                     if (ent.faction === 'HERO') {
                         for (const other of entities) {
@@ -985,6 +1112,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                             if (other.passiveAbilities?.some(pa => pa.type === 'UNTARGETABLE') && hasNonUntargetableDemon) continue;
                             // STEALTH: skip if stealthActive
                             if (other.stealthActive) continue;
+                            // FLOAT: melee heroes skip FLOAT demons if non-FLOAT demons exist
+                            if (ent.range <= 80 && other.passiveAbilities?.some(pa => pa.type === 'FLOAT')) {
+                                const hasNonFloatDemon = entities.some(e => e.faction === 'DEMON' && e.hp > 0 && !e.stealthActive && !e.passiveAbilities?.some(pa => pa.type === 'FLOAT'));
+                                if (hasNonFloatDemon) continue;
+                            }
                             const d = Math.hypot(other.x - ent.x, other.y - ent.y);
                             if (d < minDist) { minDist = d; target = other; }
                         }
@@ -1035,6 +1167,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             }
 
             if (ent.cooldown > 0) ent.cooldown -= delta;
+
+            // TAILWIND: reduce effective cooldown for attack (faster attack speed)
+            if (ent.tailwindStacks && ent.tailwindStacks > 0 && s.frameCount % 60 === 0) {
+                if (s.frameCount % 30 === 0) s.particles.push({ id: generateId(), x: ent.x + (Math.random()-0.5)*15, y: ent.y, vx: (Math.random()-0.5)*1, vy: -0.8, color: 0xffdd44, life: 20 });
+            }
 
             // MACHINE_GUN queue: fire one random-direction shot per interval
             if (ent.machineGunQueue && ent.machineGunQueue > 0) {
@@ -1164,10 +1301,33 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             if (target) {
                 if (minDist <= ent.range) {
                     if (ent.cooldown <= 0) {
-                        ent.cooldown = ent.maxCooldown;
+                        // TAILWIND: reduce cooldown reset by 5% per stack
+                        const tailwindMult = ent.tailwindStacks ? Math.max(0.4, 1 - ent.tailwindStacks * 0.05) : 1;
+                        ent.cooldown = ent.maxCooldown * tailwindMult;
 
                         // STEALTH: deactivate on first attack
                         if (ent.stealthActive) ent.stealthActive = false;
+
+                        // CHARGE_UP: accumulate stacks on attack, trigger explosion at 5 stacks
+                        if (ent.passiveAbilities) {
+                            const chargeUp = ent.passiveCache?.['CHARGE_UP'];
+                            if (chargeUp) {
+                                ent.chargeStacks = (ent.chargeStacks || 0) + 1;
+                                if (ent.chargeStacks >= 5) {
+                                    ent.chargeStacks = 0;
+                                    const expR = 100;
+                                    entities.forEach(other => {
+                                        if (other.faction === 'HERO' && other.hp > 0 && Math.hypot(other.x - ent.x, other.y - ent.y) <= expR) {
+                                            applyDamage(other, ent.attack * 3, ent);
+                                        }
+                                    });
+                                    s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: expR, life: 22, maxLife: 22, color: 0xffffff });
+                                    pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 25, text: '💥充填解放!', life: 55, maxLife: 55, color: 0xffffff });
+                                } else {
+                                    pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 15, text: `⚡${ent.chargeStacks}/5`, life: 25, maxLife: 25, color: 0xffee88 });
+                                }
+                            }
+                        }
 
                         // BERSERK: boost attack when low HP
                         let effectiveAttack = ent.attack;
@@ -1229,20 +1389,36 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                         s.particles.push({ id: generateId(), x: ent.x, y: ent.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, color: ent.color, life: 18 });
                                     }
                                 } else {
-                                    applyDamage(target, effectiveAttack, ent);
-                                    // KNOCKBACK: push target back
-                                    if (ent.passiveAbilities) {
-                                        const knockback = ent.passiveCache?.['KNOCKBACK'];
-                                        if (knockback) {
-                                            const kbDist = knockback.value || 120;
-                                            const kbAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
-                                            target.x += Math.cos(kbAngle) * kbDist;
-                                            target.y += Math.sin(kbAngle) * kbDist;
+                                    // MACHINE_GUN: melee units with machine gun fire burst
+                                    const meleeMachineGun = ent.passiveCache?.['MACHINE_GUN'];
+                                    if (meleeMachineGun) {
+                                        ent.machineGunQueue = meleeMachineGun.value || 3;
+                                        ent.machineGunCooldown = 0;
+                                    } else {
+                                        // CRITICAL: chance for 2x damage
+                                        let meleeDamage = effectiveAttack;
+                                        if (ent.passiveAbilities) {
+                                            const critical = ent.passiveCache?.['CRITICAL'];
+                                            if (critical && Math.random() * 100 < (critical.value || 20)) {
+                                                meleeDamage *= 2;
+                                                pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 25, text: '⚡会心!', life: 40, maxLife: 40, color: 0xffff44 });
+                                            }
                                         }
-                                    }
-                                    for (let k = 0; k < 3; k++) {
-                                        const a = Math.random() * Math.PI * 2;
-                                        s.particles.push({ id: generateId(), x: target.x, y: target.y, vx: Math.cos(a) * 1.5, vy: Math.sin(a) * 1.5, color: 0xffffff, life: 10 });
+                                        applyDamage(target, meleeDamage, ent);
+                                        // KNOCKBACK: push target back
+                                        if (ent.passiveAbilities) {
+                                            const knockback = ent.passiveCache?.['KNOCKBACK'];
+                                            if (knockback) {
+                                                const kbDist = knockback.value || 120;
+                                                const kbAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
+                                                target.x += Math.cos(kbAngle) * kbDist;
+                                                target.y += Math.sin(kbAngle) * kbDist;
+                                            }
+                                        }
+                                        for (let k = 0; k < 3; k++) {
+                                            const a = Math.random() * Math.PI * 2;
+                                            s.particles.push({ id: generateId(), x: target.x, y: target.y, vx: Math.cos(a) * 1.5, vy: Math.sin(a) * 1.5, color: 0xffffff, life: 10 });
+                                        }
                                     }
                                 }
                             } else {
@@ -1252,10 +1428,65 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                     ent.machineGunQueue = machineGun.value || 6;
                                     ent.machineGunCooldown = 0; // fire first shot immediately
                                 } else {
-                                    // Store effective attack temporarily for projectile
+                                    // CRITICAL: chance for 2x damage on ranged attack
+                                    let rangedDamage = effectiveAttack;
+                                    if (ent.passiveAbilities) {
+                                        const critical = ent.passiveCache?.['CRITICAL'];
+                                        if (critical && Math.random() * 100 < (critical.value || 20)) {
+                                            rangedDamage *= 2;
+                                            pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 25, text: '⚡会心!', life: 40, maxLife: 40, color: 0xffff44 });
+                                        }
+                                    }
+
+                                    // SPREAD_SHOT: fire multiple projectiles in a fan
+                                    const spreadShot = ent.passiveCache?.['SPREAD_SHOT'];
+                                    // LASER: hit all enemies in a straight line
+                                    const laser = ent.passiveCache?.['LASER'];
+
                                     const origAttack = ent.attack;
-                                    ent.attack = effectiveAttack;
-                                    spawnProjectile(ent, target);
+                                    ent.attack = rangedDamage;
+
+                                    if (spreadShot) {
+                                        const count = spreadShot.value || 3;
+                                        const baseAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
+                                        const spread = Math.PI / 8;
+                                        for (let si = 0; si < count; si++) {
+                                            const angleOff = (si - Math.floor(count / 2)) * (spread / Math.max(1, count - 1));
+                                            const spreadTarget = {
+                                                ...target,
+                                                x: ent.x + Math.cos(baseAngle + angleOff) * ent.range,
+                                                y: ent.y + Math.sin(baseAngle + angleOff) * ent.range,
+                                            };
+                                            spawnProjectile(ent, spreadTarget);
+                                        }
+                                    } else if (laser) {
+                                        // LASER: instantaneous line, hit all enemies in a straight line
+                                        const laserAngle = Math.atan2(target.y - ent.y, target.x - ent.x);
+                                        const laserRange = ent.range;
+                                        let laserHits = 0;
+                                        entities.forEach(other => {
+                                            if (other.faction === 'HERO' && other.hp > 0) {
+                                                const toOther = Math.hypot(other.x - ent.x, other.y - ent.y);
+                                                if (toOther <= laserRange) {
+                                                    const proj_angle = Math.atan2(other.y - ent.y, other.x - ent.x);
+                                                    let angleDiff = Math.abs(proj_angle - laserAngle);
+                                                    if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+                                                    if (angleDiff < 0.3) {
+                                                        applyDamage(other, rangedDamage, ent, true);
+                                                        laserHits++;
+                                                    }
+                                                }
+                                            }
+                                        });
+                                        // Laser beam visual
+                                        s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 5, maxRadius: laserRange, life: 8, maxLife: 8, color: 0xff4400 });
+                                        for (let li = 0; li < 3 + laserHits * 2; li++) {
+                                            const dist = Math.random() * laserRange;
+                                            s.particles.push({ id: generateId(), x: ent.x + Math.cos(laserAngle) * dist, y: ent.y + Math.sin(laserAngle) * dist, vx: 0, vy: -0.5, color: 0xff8800, life: 12 });
+                                        }
+                                    } else {
+                                        spawnProjectile(ent, target);
+                                    }
                                     ent.attack = origAttack;
                                 }
                             }
@@ -1280,10 +1511,11 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                 } else {
                     // HERO: ターゲットが射程外なら近づく
-                    if (minDist > ent.range) {
+                    if (minDist > ent.range && !(ent.fearFrames && ent.fearFrames > 0)) {
+                        const freezeSpeedMult = ent.freezeStacks ? Math.max(0.2, 1 - ent.freezeStacks * 0.15) : 1;
                         const a = Math.atan2(target.y - ent.y, target.x - ent.x);
-                        ent.x += Math.cos(a) * ent.speed * delta;
-                        ent.y += Math.sin(a) * ent.speed * delta;
+                        ent.x += Math.cos(a) * ent.speed * delta * freezeSpeedMult;
+                        ent.y += Math.sin(a) * ent.speed * delta * freezeSpeedMult;
                     }
                 }
             } else if (ent.faction === 'DEMON') {
@@ -1305,9 +1537,12 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 }
             } else {
                 // HERO ターゲットなし: 魔王拠点へ前進
-                const a = Math.atan2(DEMON_BASE.y - ent.y, DEMON_BASE.x - ent.x);
-                ent.x += Math.cos(a) * ent.speed * delta;
-                ent.y += Math.sin(a) * ent.speed * delta;
+                if (!(ent.fearFrames && ent.fearFrames > 0)) {
+                    const freezeSpeedMult = ent.freezeStacks ? Math.max(0.2, 1 - ent.freezeStacks * 0.15) : 1;
+                    const a = Math.atan2(DEMON_BASE.y - ent.y, DEMON_BASE.x - ent.x);
+                    ent.x += Math.cos(a) * ent.speed * delta * freezeSpeedMult;
+                    ent.y += Math.sin(a) * ent.speed * delta * freezeSpeedMult;
+                }
             }
 
             // Separation
@@ -1373,26 +1608,28 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                     if (pa.type === 'SUMMON') {
                         if (s.frameCount % (pa.cooldown || 360) === 0) {
-                            // Summons a skeleton_bone
-                            const stats = UNIT_STATS['skeleton_bone'] || UNIT_STATS['zombie']!;
-                            const skelId = generateId();
-                            const skel: EntityState = {
-                                id: skelId, type: 'skeleton_bone', faction: 'DEMON',
-                                x: ent.x + (Math.random() - 0.5) * 40,
-                                y: ent.y + (Math.random() - 0.5) * 40,
-                                hp: stats.maxHp!, maxHp: stats.maxHp!,
-                                attack: stats.attack!, range: stats.range!,
-                                speed: stats.speed!, cooldown: 0,
-                                maxCooldown: stats.maxCooldown!, color: stats.color!,
-                                materialType: stats.materialType,
-                                attackType: stats.attackType,
-                                size: stats.size,
-                                accuracy: stats.accuracy,
-                                passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined,
-                passiveCache: buildPassiveCache(stats.passiveAbilities),
-                                spawnedAt: s.frameCount,
-                            };
-                            aliveEntities.push(skel);
+                            const summonType = pa.unitId || 'skeleton_bone';
+                            const stats = UNIT_STATS[summonType] || UNIT_STATS['skeleton_bone'] || UNIT_STATS['zombie']!;
+                            const summonCount = pa.value || 1;
+                            for (let si = 0; si < summonCount; si++) {
+                                const skel: EntityState = {
+                                    id: generateId(), type: summonType, faction: 'DEMON',
+                                    x: ent.x + (Math.random() - 0.5) * 40,
+                                    y: ent.y + (Math.random() - 0.5) * 40,
+                                    hp: stats.maxHp!, maxHp: stats.maxHp!,
+                                    attack: stats.attack!, range: stats.range!,
+                                    speed: stats.speed!, cooldown: 0,
+                                    maxCooldown: stats.maxCooldown!, color: stats.color!,
+                                    materialType: stats.materialType,
+                                    attackType: stats.attackType,
+                                    size: stats.size,
+                                    accuracy: stats.accuracy,
+                                    passiveAbilities: stats.passiveAbilities ? [...stats.passiveAbilities] : undefined,
+                                    passiveCache: buildPassiveCache(stats.passiveAbilities),
+                                    spawnedAt: s.frameCount,
+                                };
+                                aliveEntities.push(skel);
+                            }
                             pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 20, text: '💀召喚', life: 60, maxLife: 60, color: 0x44aa44 });
                         }
                     }
@@ -1424,6 +1661,58 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                         // Poison tick: damage poisoned entities each frame
                         // (applied to entities that have poisonedFrames > 0)
                     }
+                    // IRON: set ironStacks from passive value (max 3 stacks)
+                    if (pa.type === 'IRON' && !ent.ironStacks) {
+                        ent.ironStacks = Math.min(3, pa.value || 1);
+                    }
+                    // TAILWIND: initialize tailwindStacks from passive value
+                    if (pa.type === 'TAILWIND' && !ent.tailwindStacks) {
+                        ent.tailwindStacks = pa.value || 10;
+                    }
+                    // CHARGE_UP: accumulate chargeStacks - reset handled at attack time
+                    if (pa.type === 'CHARGE_UP' && ent.chargeStacks === undefined) {
+                        ent.chargeStacks = 0; // initialize
+                    }
+                    // FREEZE_AURA: apply freeze stacks to nearby enemies every 30f
+                    if (pa.type === 'FREEZE_AURA' && s.frameCount % 30 === 0) {
+                        const auraR = pa.range || 80;
+                        const freezeVal = pa.value || 4;
+                        entities.forEach(other => {
+                            if (other.faction === 'HERO' && other.hp > 0 && Math.hypot(other.x - ent.x, other.y - ent.y) <= auraR) {
+                                other.freezeStacks = (other.freezeStacks || 0) + freezeVal;
+                                if (Math.random() < 0.3) s.particles.push({ id: generateId(), x: other.x, y: other.y, vx: (Math.random()-0.5)*0.5, vy: -0.5, color: 0x88ccff, life: 20 });
+                            }
+                        });
+                    }
+                    // AURA_TAILWIND: buff nearby demon allies' attack speed every cooldown frames
+                    if (pa.type === 'AURA_TAILWIND') {
+                        const atwCooldown = pa.cooldown || 180;
+                        if (s.frameCount % atwCooldown === 0) {
+                            const atwR = pa.range || 120;
+                            const atwVal = pa.value || 5;
+                            entities.forEach(other => {
+                                if (other.faction === 'DEMON' && other.hp > 0 && Math.hypot(other.x - ent.x, other.y - ent.y) <= atwR) {
+                                    other.tailwindStacks = (other.tailwindStacks || 0) + atwVal;
+                                }
+                            });
+                            s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: pa.range || 120, life: 15, maxLife: 15, color: 0xffdd44 });
+                        }
+                    }
+                    // PULL: pull nearby enemies toward this unit every 3 frames
+                    if (pa.type === 'PULL' && s.frameCount % 3 === 0) {
+                        const pullR = pa.range || 200;
+                        const pullForce = 1.5;
+                        entities.forEach(other => {
+                            if (other.faction === 'HERO' && other.hp > 0) {
+                                const dist = Math.hypot(other.x - ent.x, other.y - ent.y);
+                                if (dist > 0 && dist <= pullR) {
+                                    const pullAngle = Math.atan2(ent.y - other.y, ent.x - other.x);
+                                    other.x += Math.cos(pullAngle) * pullForce;
+                                    other.y += Math.sin(pullAngle) * pullForce;
+                                }
+                            }
+                        });
+                    }
                 });
             }
 
@@ -1435,6 +1724,46 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 ent.poisonedFrames -= delta;
                 if (s.frameCount % 20 === 0) {
                     s.particles.push({ id: generateId(), x: ent.x + (Math.random() - 0.5) * 15, y: ent.y, vx: (Math.random() - 0.5) * 1, vy: -0.8, color: 0x44ff88, life: 20 });
+                }
+            }
+
+            // BLEED tick: per-frame damage based on stacks
+            if (ent.bleedStacks && ent.bleedStacks > 0) {
+                ent.hp -= ent.bleedStacks * (1 / 60) * delta;
+                if (s.frameCount % 120 === 0) ent.bleedStacks = Math.max(0, ent.bleedStacks - 1); // 1 stack decay per 2s
+                if (s.frameCount % 15 === 0) s.particles.push({ id: generateId(), x: ent.x + (Math.random()-0.5)*10, y: ent.y, vx: (Math.random()-0.5)*0.5, vy: -0.7, color: 0xff2222, life: 15 });
+            }
+
+            // BURN tick: damage every 30 frames per stack
+            if (ent.burnStacks && ent.burnStacks > 0 && s.frameCount % 30 === 0) {
+                ent.hp -= ent.burnStacks * 5;
+                ent.burnStacks = Math.max(0, ent.burnStacks - 1);
+                for (let bi = 0; bi < 3; bi++) {
+                    const ba = Math.random() * Math.PI * 2;
+                    s.particles.push({ id: generateId(), x: ent.x + (Math.random()-0.5)*12, y: ent.y, vx: Math.cos(ba)*1.2, vy: Math.sin(ba)*1.2 - 1, color: 0xff6600, life: 18 });
+                }
+            }
+
+            // FREEZE: decay stacks every 90 frames
+            if (ent.freezeStacks && ent.freezeStacks > 0 && s.frameCount % 90 === 0) {
+                ent.freezeStacks = Math.max(0, ent.freezeStacks - 1);
+            }
+
+            // CURSE: decay stacks every 120 frames
+            if (ent.curseStacks && ent.curseStacks > 0 && s.frameCount % 120 === 0) {
+                ent.curseStacks = Math.max(0, ent.curseStacks - 1);
+            }
+
+            // TAILWIND: decay stacks every 180 frames
+            if (ent.tailwindStacks && ent.tailwindStacks > 0 && s.frameCount % 180 === 0) {
+                ent.tailwindStacks = Math.max(0, ent.tailwindStacks - 1);
+            }
+
+            // FEAR: move backwards (away from main direction) while fearFrames > 0
+            if (ent.fearFrames && ent.fearFrames > 0) {
+                ent.fearFrames -= delta;
+                if (ent.faction === 'HERO') {
+                    ent.x -= ent.speed * 0.6 * delta;
                 }
             }
 
@@ -1520,6 +1849,18 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                     }
                                 });
                                 s.aoeFlashes.push({ id: generateId(), x: t.x, y: t.y, radius: 10, maxRadius: aoeR, life: 15, maxLife: 15, color: 0xaa55ff });
+                            }
+                        }
+
+                        // PULL_ON_HIT: pull hit target toward attacker
+                        if (attacker && attacker.passiveAbilities) {
+                            const pullOnHit = attacker.passiveCache?.['PULL_ON_HIT'];
+                            if (pullOnHit && t.hp > 0) {
+                                const pullDist = pullOnHit.value || 80;
+                                const pullAngle = Math.atan2(attacker.y - t.y, attacker.x - t.x);
+                                t.x += Math.cos(pullAngle) * pullDist;
+                                t.y += Math.sin(pullAngle) * pullDist;
+                                s.particles.push({ id: generateId(), x: t.x, y: t.y, vx: Math.cos(pullAngle)*2, vy: Math.sin(pullAngle)*2, color: 0xaa66ff, life: 15 });
                             }
                         }
 
