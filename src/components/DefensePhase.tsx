@@ -758,6 +758,24 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                     }
                 }
 
+                // EXPLODE_HEAL_ON_DAMAGED: heal nearby demons when this unit is hit (orc_meat)
+                if (targetEnt.passiveAbilities && targetEnt.hp > 0) {
+                    const explodeHealDmg = targetEnt.passiveCache?.['EXPLODE_HEAL_ON_DAMAGED'];
+                    if (explodeHealDmg) {
+                        const healR = explodeHealDmg.range || 120;
+                        const healAmt = explodeHealDmg.value || 80;
+                        entities.forEach(ally => {
+                            if (ally.faction === 'DEMON' && ally.hp > 0 && Math.hypot(ally.x - targetEnt.x, ally.y - targetEnt.y) <= healR) {
+                                ally.hp = Math.min(ally.maxHp, ally.hp + healAmt);
+                            }
+                        });
+                        if (s.frameCount % 4 === 0) {
+                            s.aoeFlashes.push({ id: generateId(), x: targetEnt.x, y: targetEnt.y, radius: 10, maxRadius: healR, life: 12, maxLife: 12, color: 0x44ff88 });
+                            s.particles.push({ id: generateId(), x: targetEnt.x, y: targetEnt.y, vx: 0, vy: -1.5, color: 0x44ff88, life: 20 });
+                        }
+                    }
+                }
+
                 // EXPLODE_HEAL_ON_HIT: heal nearby demons when this unit hits
                 if (attacker && attacker.passiveAbilities && targetEnt.hp > 0) {
                     const explodeHealOnHit = attacker.passiveCache?.['EXPLODE_HEAL_ON_HIT'];
@@ -1298,6 +1316,37 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                 }
             }
 
+            // CONTACT_DAMAGE: always move toward target, deal contact damage on cooldown
+            if (ent.faction === 'DEMON' && ent.passiveAbilities) {
+                const contactDmg = ent.passiveCache?.['CONTACT_DAMAGE'];
+                if (contactDmg) {
+                    // Move toward nearest enemy regardless of range
+                    if (target) {
+                        if (!ent.isDashing) {
+                            const prevX = ent.x, prevY = ent.y;
+                            const ca = Math.atan2(target.y - ent.y, target.x - ent.x);
+                            ent.x += Math.cos(ca) * ent.speed * delta;
+                            ent.y += Math.sin(ca) * ent.speed * delta;
+                            const moveRegen = ent.passiveCache?.['MOVE_REGEN'];
+                            if (moveRegen) {
+                                const moved = Math.hypot(ent.x - prevX, ent.y - prevY);
+                                ent.hp = Math.min(ent.maxHp, ent.hp + moved * (moveRegen.value || 0.05));
+                            }
+                        }
+                    }
+                    // Damage on contact (within range) with cooldown
+                    if (ent.cooldown <= 0 && target && minDist <= ent.range) {
+                        ent.cooldown = ent.maxCooldown;
+                        applyDamage(target, ent.attack, ent);
+                        s.aoeFlashes.push({ id: generateId(), x: ent.x, y: ent.y, radius: 10, maxRadius: ent.range, life: 8, maxLife: 8, color: ent.color });
+                    }
+                    ent.x = Math.max(20, Math.min(fieldWidth - 20, ent.x));
+                    ent.y = Math.max(20, Math.min(FIELD_HEIGHT - 20, ent.y));
+                    aliveEntities.push(ent);
+                    continue; // skip normal attack/movement logic
+                }
+            }
+
             if (target) {
                 if (minDist <= ent.range) {
                     if (ent.cooldown <= 0) {
@@ -1395,13 +1444,25 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                         ent.machineGunQueue = meleeMachineGun.value || 3;
                                         ent.machineGunCooldown = 0;
                                     } else {
-                                        // CRITICAL: chance for 2x damage
+                                        // CRITICAL: 確率で特殊効果（critEffectで種別決定）
                                         let meleeDamage = effectiveAttack;
                                         if (ent.passiveAbilities) {
                                             const critical = ent.passiveCache?.['CRITICAL'];
                                             if (critical && Math.random() * 100 < (critical.value || 20)) {
-                                                meleeDamage *= 2;
-                                                pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 25, text: '⚡会心!', life: 40, maxLife: 40, color: 0xffff44 });
+                                                const ce = critical.critEffect || 'double';
+                                                if (ce === 'double') {
+                                                    meleeDamage *= 2;
+                                                    pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 25, text: '⚡会心!', life: 40, maxLife: 40, color: 0xffff44 });
+                                                } else if (ce === 'stun') {
+                                                    // imp_bone: クリティカル→スタン0.5秒
+                                                    target.stunFrames = 30;
+                                                    pushFloatingText(s.floatingTexts, { id: generateId(), x: target.x, y: target.y - 20, text: '⚡スタン!', life: 40, maxLife: 40, color: 0xffff44 });
+                                                } else if (ce === 'tailwind') {
+                                                    // archer_bone: クリティカル→自身に追い風+value
+                                                    const tailwindPa = ent.passiveAbilities?.find(p => p.type === 'TAILWIND');
+                                                    ent.tailwindStacks = (ent.tailwindStacks || 0) + (tailwindPa?.value || 10);
+                                                    pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 25, text: '💨会心追い風!', life: 40, maxLife: 40, color: 0xffff44 });
+                                                }
                                             }
                                         }
                                         applyDamage(target, meleeDamage, ent);
@@ -1428,15 +1489,26 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                     ent.machineGunQueue = machineGun.value || 6;
                                     ent.machineGunCooldown = 0; // fire first shot immediately
                                 } else {
-                                    // CRITICAL: chance for 2x damage on ranged attack
+                                    // CRITICAL: 確率で特殊効果（critEffectで種別決定）
                                     let rangedDamage = effectiveAttack;
+                                    let rangedIsCrit = false;
                                     if (ent.passiveAbilities) {
                                         const critical = ent.passiveCache?.['CRITICAL'];
                                         if (critical && Math.random() * 100 < (critical.value || 20)) {
-                                            rangedDamage *= 2;
-                                            pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 25, text: '⚡会心!', life: 40, maxLife: 40, color: 0xffff44 });
+                                            rangedIsCrit = true;
+                                            const ce = critical.critEffect || 'double';
+                                            if (ce === 'double') {
+                                                rangedDamage *= 2;
+                                                pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 25, text: '⚡会心!', life: 40, maxLife: 40, color: 0xffff44 });
+                                            } else if (ce === 'tailwind') {
+                                                const tailwindPa = ent.passiveAbilities?.find(p => p.type === 'TAILWIND');
+                                                ent.tailwindStacks = (ent.tailwindStacks || 0) + (tailwindPa?.value || 10);
+                                                pushFloatingText(s.floatingTexts, { id: generateId(), x: ent.x, y: ent.y - 25, text: '💨会心追い風!', life: 40, maxLife: 40, color: 0xffff44 });
+                                            }
+                                            // bounce critEffect handled in projectile hit section
                                         }
                                     }
+                                    void rangedIsCrit; // 現在はbounce判定を projectile hit 側で処理
 
                                     // SPREAD_SHOT: fire multiple projectiles in a fan
                                     const spreadShot = ent.passiveCache?.['SPREAD_SHOT'];
@@ -1877,6 +1949,15 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                     }
                                 }
                                 if (closestBounceTarget) {
+                                    // CRITICAL(critEffect:'bounce'): 50%で跳弾回数+1
+                                    let nextBounces = (proj.bouncesLeft ?? 0) - 1;
+                                    if (attacker) {
+                                        const critPa = attacker.passiveCache?.['CRITICAL'];
+                                        if (critPa?.critEffect === 'bounce' && Math.random() * 100 < (critPa.value || 50)) {
+                                            nextBounces = (proj.bouncesLeft ?? 0); // 減らさない（+1と同等）
+                                            pushFloatingText(s.floatingTexts, { id: generateId(), x: t.x, y: t.y - 15, text: '⚡跳弾会心!', life: 35, maxLife: 35, color: 0xeeeeff });
+                                        }
+                                    }
                                     const newHitIds = new Set(proj.hitIds || []);
                                     newHitIds.add(t.id);
                                     s.projectiles.push({
@@ -1896,8 +1977,8 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
                                         maxDistance: Infinity,
                                         distanceTraveled: 0,
                                         sourceId: proj.sourceId,
-                                        bouncesLeft: proj.bouncesLeft - 1,
-                                        lifetime: proj.lifetime, // carry remaining lifetime
+                                        bouncesLeft: nextBounces,
+                                        lifetime: proj.lifetime,
                                         fromProjectile: true,
                                     });
                                 }
