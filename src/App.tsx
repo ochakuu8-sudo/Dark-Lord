@@ -21,7 +21,7 @@ const GameController: React.FC = () => {
     setIsDebugMode(true);
     [
       'goblin', 'skeleton', 'archer', 'orc', 'lich', 'cerberus', 'imp', 'banshee',
-      'wisp', 'necromancer', 'minotaur', 'ghoul',
+      'wisp', 'necromancer', 'minotaur', 'ghoul', 'gargoyle',
     ].forEach(id => {
       unlockRecipe(id);
       addEquippedRecipe(id);

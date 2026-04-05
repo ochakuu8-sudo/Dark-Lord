@@ -314,4 +314,6 @@ export const RELICS: Relic[] = [
     { id: 'fire_crown',        name: '炎の王冠',          rarity: 'rare',  description: '赤系ユニットの攻撃力が1.5倍になる。それ以外は0.8倍になる。',       price: 80,  icon: '👑' },
     { id: 'mana_prism',        name: 'マナの水晶',        rarity: 'rare',  description: '自拠点の最大HPが半分になる代わりに、強力な魔法効果を得る。',       price: 60,  icon: '💎' },
     { id: 'necromancer_guide', name: '死霊術師の手引き',  rarity: 'rare',  description: '敵ユニット撃破時25%の確率でスケルトンが召喚される。',               price: 100, icon: '📖' },
+    { id: 'sages_stone',       name: '賢者の石',          rarity: 'rare',  description: '召喚時に同じユニットをもう1体追加召喚する（召喚数+1）。',              price: 120, icon: '🪨' },
+    { id: 'powder_coupon',     name: '火薬割引券',         rarity: 'common',   description: '全爆発系アビリティの爆発半径が+20%拡大される。',                   price: 70,  icon: '💥' },
 ];
