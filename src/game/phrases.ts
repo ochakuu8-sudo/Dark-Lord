@@ -162,7 +162,9 @@ export const PASSIVE_PHRASE_TAGS: Record<string, Phrase[]> = {
     'FREEZE_AURA':          ['常時', '付与', '凍結', '周囲'],
     'EXPLODE_HEAL_ON_HIT':  ['命中時', '回復', '周囲', '味方'],
     'ALLY_DEATH_PURSUIT':   ['味方が死亡時', '突進', '自身'],
-    'AREA_DOT_ON_HIT':      ['命中時', '爆発', '着弾地点'],
+    'AREA_DOT_ON_HIT':           ['命中時', '爆発', '着弾地点'],
+    'CONTACT_DAMAGE':            ['常時', '自身'],
+    'EXPLODE_HEAL_ON_DAMAGED':   ['被弾時', '回復', '周囲', '味方'],
 };
 
 // ── ヘルパー: 指定タイプのタグ一覧を取得 ──────────────────────

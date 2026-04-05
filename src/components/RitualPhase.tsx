@@ -5,7 +5,7 @@ import gsap from 'gsap';
 import { useGame } from '../contexts/GameContext';
 import {
     COLORS, PIECE_EMOJIS, ALL_RECIPES,
-    ROWS, COLS, BLOCK_SIZE, RECIPE_EMOJIS, MATERIAL_BG_COLORS, COLOR_HEX,
+    ROWS, COLS, BLOCK_SIZE, ENEMY_BOARD_WIDTH, RECIPE_EMOJIS, MATERIAL_BG_COLORS, COLOR_HEX,
     RARITY_COLOR, RARITY_LABEL, type Recipe
 } from '../game/config';
 import { UNIT_STATS, PASSIVE_DESCRIPTIONS } from '../game/entities';
@@ -998,77 +998,63 @@ const RitualPhase: React.FC = () => {
         </div>
     );
 
-    // ── 出撃先選択パネル（右サイドバー） ──────────────────────────
+    // ── 出撃先選択オーバーレイ（敵陣下部） ──────────────────────────
     const currentOpt = battleOptions[previewIdx] ?? null;
     const currentOptRecipe = currentOpt ? ALL_RECIPES.find(r => r.id === currentOpt.recipeId) : null;
     const currentOptCol = currentOpt ? DIFF_COLOR[currentOpt.difficulty] : '#888';
-    const panelRightSlot = document.getElementById('ritual-right-panel-slot');
 
-    const rightPanelContent = battleOptions.length > 0 && currentOpt && (
+    const btnStyle: React.CSSProperties = {
+        background: 'rgba(20,8,40,0.9)', border: '1px solid #442266',
+        color: '#aa66ee', fontSize: 14, width: 26, height: 26,
+        borderRadius: 4, cursor: 'pointer', flexShrink: 0, lineHeight: 1,
+    };
+
+    const enemySelectionOverlay = battleOptions.length > 0 && currentOpt && (
         <div style={{
-            width: '100%', height: '100%', boxSizing: 'border-box',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            position: 'absolute',
+            left: curWidth,
+            bottom: 0,
+            width: ENEMY_BOARD_WIDTH,
+            background: 'rgba(6, 3, 16, 0.92)',
+            borderTop: '1px solid #2a1040',
+            pointerEvents: 'auto',
+            zIndex: 20,
+            boxSizing: 'border-box',
+            padding: '6px 10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
         }}>
-            {/* ヘッダー */}
-            <div style={{ padding: '8px 8px 0', textAlign: 'center', flexShrink: 0 }}>
-                <div style={{ fontSize: 8, color: '#443355', letterSpacing: '2px' }}>⚔️ 出撃先</div>
-                <div style={{ fontSize: 9, color: currentOptCol, letterSpacing: 1, marginTop: 1 }}>
-                    {DIFF_STARS[currentOpt.difficulty]}
-                </div>
-                <div style={{ fontSize: 10, fontWeight: 'bold', color: '#ddbbff', marginTop: 2, lineHeight: 1.2 }}>
-                    {currentOpt.label}
-                </div>
-            </div>
-
-            {/* ナビゲーション */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '4px 6px', flexShrink: 0 }}>
+            {/* 行1: ナビゲーション＋ミッション名 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <button
                     onClick={() => { const i = (previewIdx - 1 + battleOptions.length) % battleOptions.length; setPreviewIdx(i); selectBattleOption(battleOptions[i]); }}
-                    style={{ background: 'rgba(20,8,40,0.9)', border: '1px solid #442266', color: '#aa66ee', fontSize: 12, width: 24, height: 24, borderRadius: 4, cursor: 'pointer', flexShrink: 0 }}
+                    style={btnStyle}
                 >◀</button>
-                <span style={{ fontSize: 9, color: '#665577' }}>{previewIdx + 1}/{battleOptions.length}</span>
+                <span style={{ fontSize: 9, color: '#665577', flexShrink: 0 }}>{previewIdx + 1}/{battleOptions.length}</span>
                 <button
                     onClick={() => { const i = (previewIdx + 1) % battleOptions.length; setPreviewIdx(i); selectBattleOption(battleOptions[i]); }}
-                    style={{ background: 'rgba(20,8,40,0.9)', border: '1px solid #442266', color: '#aa66ee', fontSize: 12, width: 24, height: 24, borderRadius: 4, cursor: 'pointer', flexShrink: 0 }}
+                    style={btnStyle}
                 >▶</button>
+                <span style={{ fontSize: 8, color: '#443355', flexShrink: 0, marginLeft: 2 }}>⚔️ 出撃先</span>
+                <span style={{ fontSize: 9, color: currentOptCol, flexShrink: 0 }}>{DIFF_STARS[currentOpt.difficulty]}</span>
+                <span style={{ fontSize: 11, fontWeight: 'bold', color: '#ddbbff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentOpt.label}</span>
             </div>
-
-            {/* スクロール可能な本文 */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {/* 敵構成 */}
-                <div style={{ borderTop: '1px solid #1a0830', paddingTop: 5 }}>
-                    <div style={{ fontSize: 8, color: '#7755aa', marginBottom: 3 }}>敵構成</div>
+            {/* 行2: 敵構成＋報酬 */}
+            <div style={{ display: 'flex', gap: 10, fontSize: 9, color: '#ccaacc', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '2px 8px' }}>
+                    <span style={{ color: '#7755aa' }}>敵:</span>
                     {currentOpt.gruntGroups.map((g, i) => (
-                        <div key={i} style={{ fontSize: 9, color: '#ccaacc' }}>{g.type} ×{g.count}</div>
+                        <span key={i}>{g.type}×{g.count}</span>
                     ))}
                 </div>
-
-                {/* 報酬 */}
-                <div style={{ borderTop: '1px solid #1a0830', paddingTop: 5 }}>
-                    <div style={{ fontSize: 8, color: '#7755aa', marginBottom: 3 }}>報酬</div>
-                    {/* ピース */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 4 }}>
-                        <span style={{ fontSize: 13 }}>{PIECE_EMOJIS[currentOpt.pieceType]}</span>
-                        <span style={{ fontSize: 9, color: COLOR_HEX[currentOpt.pieceType], lineHeight: 1.2 }}>
-                            {MATERIAL_NAMES_UI[currentOpt.pieceType]}<br />ピース×敵数
-                        </span>
-                    </div>
-                    {/* レシピ（全滅報酬） */}
+                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ color: COLOR_HEX[currentOpt.pieceType] }}>{PIECE_EMOJIS[currentOpt.pieceType]}{MATERIAL_NAMES_UI[currentOpt.pieceType]}×敵数</span>
                     {currentOptRecipe && (
-                        <div>
-                            <div style={{ fontSize: 8, color: '#ffaa44', marginBottom: 3 }}>📜 全滅ボーナス</div>
-                            <div style={{ fontSize: 9, fontWeight: 'bold', color: '#ffddaa' }}>{currentOptRecipe.name}</div>
-                            <div style={{ fontSize: 8, color: RARITY_COLOR[currentOptRecipe.rarity], marginBottom: 4 }}>{RARITY_LABEL[currentOptRecipe.rarity]}</div>
-                            <div style={{ display: 'grid', gap: 1, gridTemplateColumns: `repeat(${currentOptRecipe.pattern[0]?.length ?? 3}, 10px)` }}>
-                                {currentOptRecipe.pattern.map((row, ri) => row.map((val, ci) => (
-                                    <div key={`${ri}-${ci}`} style={{
-                                        width: 10, height: 10, borderRadius: 2,
-                                        background: val === -1 ? 'transparent' : val === 9 ? '#333' : COLOR_HEX[val] ?? '#333',
-                                        border: val !== -1 ? '1px solid #333' : 'none',
-                                    }} />
-                                )))}
-                            </div>
-                        </div>
+                        <span style={{ color: '#ffaa44' }}>
+                            📜{currentOptRecipe.name}
+                            <span style={{ color: RARITY_COLOR[currentOptRecipe.rarity], marginLeft: 3 }}>({RARITY_LABEL[currentOptRecipe.rarity]})</span>
+                        </span>
                     )}
                 </div>
             </div>
@@ -1077,8 +1063,8 @@ const RitualPhase: React.FC = () => {
 
     return (
         <>
-            {/* ───── 盤面オーバーレイ（フラッシュ・コンボ演出） ───── */}
-            <div style={{ width: curWidth, height: '100%', position: 'relative', pointerEvents: 'none' }}
+            {/* ───── 盤面オーバーレイ（フラッシュ・コンボ演出＋敵陣選択） ───── */}
+            <div style={{ width: curWidth + ENEMY_BOARD_WIDTH, height: '100%', position: 'relative', pointerEvents: 'none' }}
                 onClick={() => setPinnedPiece(null)}>
                 <style>{`
                     @keyframes comboAppear {
@@ -1129,6 +1115,8 @@ const RitualPhase: React.FC = () => {
                         }}>{comboLabel}</div>
                     </div>
                 )}
+                {/* ───── 出撃先選択オーバーレイ（敵陣下部） ───── */}
+                {enemySelectionOverlay}
             </div>
 
             {/* ───── ユニットピース情報ポップアップ ───── */}
@@ -1270,7 +1258,6 @@ const RitualPhase: React.FC = () => {
             {panelSlot && ReactDOM.createPortal(leftPanel, panelSlot)}
             {bottomSlot && ReactDOM.createPortal(bottomContent, bottomSlot)}
             {panelBottomSlot && ReactDOM.createPortal(panelBottomContent, panelBottomSlot)}
-            {panelRightSlot && rightPanelContent && ReactDOM.createPortal(rightPanelContent, panelRightSlot)}
         </>
     );
 };
