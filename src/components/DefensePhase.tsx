@@ -1350,8 +1350,8 @@ const DefensePhase: React.FC<DefensePhaseProps> = ({ registerSpawn, onStateChang
             if (target) {
                 if (minDist <= ent.range) {
                     if (ent.cooldown <= 0) {
-                        // TAILWIND: reduce cooldown reset by 5% per stack（スタック上限なし）
-                        const tailwindMult = ent.tailwindStacks ? Math.max(0.05, 1 - ent.tailwindStacks * 0.05) : 1;
+                        // TAILWIND: 1スタック=攻撃速度1%UP（スタックが増えるほどどんどん速くなる）
+                        const tailwindMult = ent.tailwindStacks ? 1 / (1 + ent.tailwindStacks * 0.01) : 1;
                         ent.cooldown = ent.maxCooldown * tailwindMult;
 
                         // STEALTH: deactivate on first attack
