@@ -336,35 +336,37 @@ h2 {
 
 .start-btn,
 .restart-btn {
-  background: #111;
+  background: linear-gradient(135deg, #a00, #300);
   color: #fff;
-  border: 1px solid #555;
+  border: 1px solid #f22;
   padding: 14px 40px;
   font-size: 20px;
   font-weight: bold;
   border-radius: 6px;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition: background 0.2s, border-color 0.2s;
   letter-spacing: 2px;
 }
 
 .start-btn:hover,
 .restart-btn:hover {
-  background: #222;
-  border-color: #fff;
+  background: linear-gradient(135deg, #d00, #500);
+  border-color: #f66;
 }
 
 .start-btn:active,
 .restart-btn:active {
-  background: #333;
+  background: linear-gradient(135deg, #800, #200);
 }
 
 .debug-btn {
-  border-color: #444;
-  color: #888;
+  background: linear-gradient(135deg, #006600, #003300);
+  border-color: #0a0;
+  color: #afa;
 }
 
 .debug-btn:hover {
-  border-color: #aaa;
+  background: linear-gradient(135deg, #008800, #005500);
+  border-color: #0f0;
   color: #fff;
 }

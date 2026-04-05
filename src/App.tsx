@@ -33,7 +33,6 @@ const GameController: React.FC = () => {
     <div className="game-wrapper">
       {phase === 'TITLE' && (
         <div className="title-screen">
-          <h1>魔王軍の防衛儀式</h1>
           <div style={{ display: 'flex', gap: '24px', justifyContent: 'center' }}>
             <button className="start-btn" onClick={startNormalGame}>ローグライク</button>
             <button className="start-btn debug-btn" onClick={startDebugMode}>デバッグ</button>
